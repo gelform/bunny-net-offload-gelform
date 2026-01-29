@@ -28,6 +28,22 @@ class BNOG_Bunny_Storage {
     const MAX_RETRIES = 3;
 
     /**
+     * Allowed MIME types for upload.
+     *
+     * @var array
+     */
+    const ALLOWED_MIME_TYPES = array(
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/svg+xml',
+        'image/bmp',
+        'image/tiff',
+    );
+
+    /**
      * Upload a file to Bunny Storage.
      *
      * @param string $local_path  Full path to local file.
@@ -44,6 +60,22 @@ class BNOG_Bunny_Storage {
 
         if ( ! file_exists( $local_path ) || ! is_readable( $local_path ) ) {
             return new WP_Error( 'file_not_found', __( 'Local file not found or not readable.', 'bunny-net-offload-gelform' ) );
+        }
+
+        // Validate file type before upload.
+        $file_type = wp_check_filetype( $local_path );
+        if ( empty( $file_type['type'] ) || ! in_array( $file_type['type'], self::ALLOWED_MIME_TYPES, true ) ) {
+            return new WP_Error( 'invalid_file_type', __( 'File type is not allowed for CDN upload.', 'bunny-net-offload-gelform' ) );
+        }
+
+        // Validate file path is within allowed directories (defense in depth).
+        $real_path    = wp_normalize_path( realpath( $local_path ) );
+        $upload_dir   = wp_upload_dir();
+        $uploads_path = wp_normalize_path( $upload_dir['basedir'] );
+        $content_path = wp_normalize_path( WP_CONTENT_DIR );
+
+        if ( false === $real_path || ( 0 !== strpos( $real_path, $uploads_path ) && 0 !== strpos( $real_path, $content_path ) ) ) {
+            return new WP_Error( 'invalid_path', __( 'File path is not within allowed directories.', 'bunny-net-offload-gelform' ) );
         }
 
         // Get storage password (it's stored encrypted).

@@ -118,6 +118,11 @@ class BNOG_Admin {
             return;
         }
 
+        // Verify user capabilities before processing auth redirect.
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+
         // Store result in transient and redirect to clean URL.
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         if ( 'success' === $_GET['auth'] ) {

@@ -134,14 +134,24 @@ class BNOG_Bunny_Auth {
         // Debug: Log all GET parameters to help identify what Bunny sends back.
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG && count( $_GET ) > 1 ) {
             $params = array();
+            // Keys that may contain sensitive data - mask their values.
+            $sensitive_keys = array( 'apiKey', 'AccessKey', 'api_key', 'token', 'key', 'accessKey', 'access_key', 'password', 'secret' );
+
             foreach ( $_GET as $key => $value ) {
                 if ( 'page' !== $key ) {
-                    $params[ $key ] = sanitize_text_field( wp_unslash( $value ) );
+                    $sanitized_value = sanitize_text_field( wp_unslash( $value ) );
+                    // Mask sensitive values to prevent logging credentials.
+                    if ( in_array( $key, $sensitive_keys, true ) && strlen( $sanitized_value ) > 8 ) {
+                        $params[ $key ] = substr( $sanitized_value, 0, 4 ) . '****' . substr( $sanitized_value, -4 );
+                    } else {
+                        $params[ $key ] = $sanitized_value;
+                    }
                 }
             }
             if ( ! empty( $params ) ) {
                 // Store for display on admin page.
                 set_transient( 'bnog_debug_callback_params', $params, 300 );
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                 error_log( '[Bunny.net Offload] Callback params: ' . wp_json_encode( $params ) );
             }
         }
