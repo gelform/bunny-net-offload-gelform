@@ -194,6 +194,16 @@ class BNOG_Image_Processor {
             return new WP_Error( 'invalid_image', __( 'File is not a supported image type.', 'bunny-net-offload-gelform' ) );
         }
 
+        // Validate file path is within allowed directories (defense in depth).
+        $file_path   = wp_normalize_path( realpath( $file_path ) );
+        $upload_dir  = wp_upload_dir();
+        $uploads_path = wp_normalize_path( $upload_dir['basedir'] );
+        $content_path = wp_normalize_path( WP_CONTENT_DIR );
+
+        if ( false === $file_path || ( 0 !== strpos( $file_path, $uploads_path ) && 0 !== strpos( $file_path, $content_path ) ) ) {
+            return new WP_Error( 'invalid_path', __( 'File path is not within allowed directories.', 'bunny-net-offload-gelform' ) );
+        }
+
         $config = bunny_net_offload_gelform()->get_config();
 
         // Merge options with config defaults.
