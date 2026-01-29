@@ -33,6 +33,7 @@ class BNOG_Admin {
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+        add_action( 'admin_init', array( $this, 'handle_auth_redirect' ) );
         add_action( 'admin_notices', array( $this, 'display_notices' ) );
 
         // AJAX handlers.
@@ -87,56 +88,90 @@ class BNOG_Admin {
                 'nonce'     => wp_create_nonce( 'bnog_admin_nonce' ),
                 'authUrl'   => bunny_net_offload_gelform()->auth->get_auth_url(),
                 'strings'   => array(
-                    'settingUp'     => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
-                    'success'       => __( 'Success!', 'bunny-net-offload-gelform' ),
-                    'error'         => __( 'Error', 'bunny-net-offload-gelform' ),
-                    'saving'        => __( 'Saving...', 'bunny-net-offload-gelform' ),
-                    'saved'         => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
-                    'syncing'       => __( 'Syncing...', 'bunny-net-offload-gelform' ),
-                    'syncComplete'  => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
-                    'confirmDelete' => __( 'Are you sure you want to disconnect? This will not delete your CDN content.', 'bunny-net-offload-gelform' ),
-                    'purging'       => __( 'Purging cache...', 'bunny-net-offload-gelform' ),
-                    'purged'        => __( 'Cache purged!', 'bunny-net-offload-gelform' ),
+                    'settingUp'      => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
+                    'success'        => __( 'Success!', 'bunny-net-offload-gelform' ),
+                    'error'          => __( 'Error', 'bunny-net-offload-gelform' ),
+                    'saving'         => __( 'Saving...', 'bunny-net-offload-gelform' ),
+                    'saved'          => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
+                    'syncing'        => __( 'Syncing in progress...', 'bunny-net-offload-gelform' ),
+                    'syncComplete'   => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
+                    'syncBackground' => __( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ),
+                    'confirmDelete'  => __( 'Are you sure you want to disconnect? This will not delete your CDN content.', 'bunny-net-offload-gelform' ),
+                    'purging'        => __( 'Purging cache...', 'bunny-net-offload-gelform' ),
+                    'purged'         => __( 'Cache purged!', 'bunny-net-offload-gelform' ),
                 ),
             )
         );
     }
 
     /**
+     * Handle auth redirect to clean URL (runs on admin_init before output).
+     */
+    public function handle_auth_redirect() {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( ! isset( $_GET['page'] ) || self::PAGE_SLUG !== $_GET['page'] ) {
+            return;
+        }
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( ! isset( $_GET['auth'] ) ) {
+            return;
+        }
+
+        // Store result in transient and redirect to clean URL.
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( 'success' === $_GET['auth'] ) {
+            set_transient( 'bnog_auth_success', true, 30 );
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        } elseif ( 'failed' === $_GET['auth'] ) {
+            set_transient( 'bnog_auth_failed', true, 30 );
+        }
+
+        wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG ) );
+        exit;
+    }
+
+    /**
      * Display admin notices.
      */
     public function display_notices() {
-        // Check for auth callback result.
-        if ( isset( $_GET['page'] ) && self::PAGE_SLUG === $_GET['page'] ) {
-            if ( isset( $_GET['auth'] ) ) {
-                if ( 'success' === $_GET['auth'] ) {
-                    echo '<div class="notice notice-success is-dismissible"><p>';
-                    esc_html_e( 'Successfully connected to Bunny.net!', 'bunny-net-offload-gelform' );
-                    echo '</p></div>';
-                } elseif ( 'failed' === $_GET['auth'] ) {
-                    $error = get_transient( 'bnog_auth_error' );
-                    delete_transient( 'bnog_auth_error' );
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( ! isset( $_GET['page'] ) || self::PAGE_SLUG !== $_GET['page'] ) {
+            return;
+        }
 
-                    echo '<div class="notice notice-error is-dismissible"><p>';
-                    if ( $error ) {
-                        echo esc_html( $error );
-                    } else {
-                        esc_html_e( 'Failed to connect to Bunny.net. Please try again.', 'bunny-net-offload-gelform' );
-                    }
-                    echo '</p></div>';
-                }
+        // Show success notice from transient.
+        if ( get_transient( 'bnog_auth_success' ) ) {
+            delete_transient( 'bnog_auth_success' );
+            echo '<div class="notice notice-success is-dismissible"><p>';
+            esc_html_e( 'Successfully connected to Bunny.net!', 'bunny-net-offload-gelform' );
+            echo '</p></div>';
+        }
+
+        // Show error notice from transient.
+        if ( get_transient( 'bnog_auth_failed' ) ) {
+            delete_transient( 'bnog_auth_failed' );
+            $error = get_transient( 'bnog_auth_error' );
+            delete_transient( 'bnog_auth_error' );
+
+            echo '<div class="notice notice-error is-dismissible"><p>';
+            if ( $error ) {
+                echo esc_html( $error );
+            } else {
+                esc_html_e( 'Failed to connect to Bunny.net. Please try again.', 'bunny-net-offload-gelform' );
             }
+            echo '</p></div>';
+        }
 
-            // Debug: Show callback parameters if WP_DEBUG is on.
-            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                $debug_params = get_transient( 'bnog_debug_callback_params' );
-                if ( $debug_params ) {
-                    delete_transient( 'bnog_debug_callback_params' );
-                    echo '<div class="notice notice-info is-dismissible"><p>';
-                    echo '<strong>Debug - Callback parameters received:</strong><br>';
-                    echo '<code>' . esc_html( wp_json_encode( $debug_params, JSON_PRETTY_PRINT ) ) . '</code>';
-                    echo '</p></div>';
-                }
+        // Debug: Show callback parameters if WP_DEBUG is on.
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            $debug_params = get_transient( 'bnog_debug_callback_params' );
+            if ( $debug_params ) {
+                delete_transient( 'bnog_debug_callback_params' );
+                echo '<div class="notice notice-info is-dismissible"><p>';
+                echo '<strong>Debug - Callback parameters received:</strong><br>';
+                echo '<code>' . esc_html( wp_json_encode( $debug_params, JSON_PRETTY_PRINT ) ) . '</code>';
+                echo '</p></div>';
             }
         }
     }
@@ -231,7 +266,7 @@ class BNOG_Admin {
                             </th>
                             <td>
                                 <select name="region" id="bnog-region" class="regular-text">
-                                    <option value="NY"><?php esc_html_e( 'New York, USA (Recommended)', 'bunny-net-offload-gelform' ); ?></option>
+                                    <option value="NY"><?php esc_html_e( 'New York, USA', 'bunny-net-offload-gelform' ); ?></option>
                                     <?php foreach ( $regions as $code => $region ) : ?>
                                         <?php if ( 'NY' !== $code ) : ?>
                                             <option value="<?php echo esc_attr( $code ); ?>">
@@ -518,7 +553,10 @@ class BNOG_Admin {
      * AJAX handler for CDN setup.
      */
     public function ajax_setup_cdn() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
@@ -574,7 +612,10 @@ class BNOG_Admin {
      * AJAX handler for saving settings.
      */
     public function ajax_save_settings() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
@@ -610,7 +651,10 @@ class BNOG_Admin {
      * AJAX handler for purging cache.
      */
     public function ajax_purge_cache() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );

@@ -322,9 +322,14 @@ class BNOG_Media_Handler {
         update_post_meta( $attachment_id, '_bnog_cdn_url', $cdn_url );
         update_post_meta( $attachment_id, '_bnog_synced', true );
 
+        // Get config for keep_local_files option.
+        $config           = bunny_net_offload_gelform()->get_config();
+        $keep_local_files = ! empty( $config['keep_local_files'] );
+
         // Sync thumbnails.
         $metadata         = wp_get_attachment_metadata( $attachment_id );
         $metadata_updated = false;
+        $thumb_files      = array();
 
         if ( ! empty( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
             $upload_dir = dirname( $main_file );
@@ -335,6 +340,9 @@ class BNOG_Media_Handler {
                 if ( ! file_exists( $thumb_file ) ) {
                     continue;
                 }
+
+                // Track thumbnail files for potential deletion.
+                $thumb_files[] = $thumb_file;
 
                 // Process thumbnail if resize option is enabled.
                 if ( $resize_before_sync && bunny_net_offload_gelform()->image_processor->is_processable_image( $thumb_file ) ) {
@@ -363,6 +371,36 @@ class BNOG_Media_Handler {
         // Save updated metadata if thumbnails were resized.
         if ( $metadata_updated ) {
             wp_update_attachment_metadata( $attachment_id, $metadata );
+        }
+
+        // Delete local files if keep_local_files is disabled.
+        if ( ! $keep_local_files ) {
+            // Delete main file (may be -scaled version).
+            if ( file_exists( $main_file ) ) {
+                wp_delete_file( $main_file );
+            }
+
+            // Delete original file if WordPress created a scaled version.
+            // WordPress stores original filename in metadata when it creates a -scaled version.
+            if ( ! empty( $metadata['original_image'] ) ) {
+                $upload_dir    = dirname( $main_file );
+                $original_file = $upload_dir . '/' . $metadata['original_image'];
+                if ( file_exists( $original_file ) ) {
+                    wp_delete_file( $original_file );
+                }
+            }
+
+            // Delete thumbnail files.
+            foreach ( $thumb_files as $thumb_file ) {
+                if ( file_exists( $thumb_file ) ) {
+                    wp_delete_file( $thumb_file );
+                }
+            }
+
+            bunny_net_offload_gelform()->log(
+                sprintf( 'Deleted local files for attachment %d after CDN sync.', $attachment_id ),
+                'info'
+            );
         }
 
         return true;
@@ -418,7 +456,10 @@ class BNOG_Media_Handler {
      * AJAX handler for syncing existing media.
      */
     public function ajax_sync_media() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
@@ -493,7 +534,10 @@ class BNOG_Media_Handler {
      * AJAX handler to get sync status.
      */
     public function ajax_get_sync_status() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
@@ -525,7 +569,10 @@ class BNOG_Media_Handler {
      * AJAX handler to cancel sync.
      */
     public function ajax_cancel_sync() {
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );

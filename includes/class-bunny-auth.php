@@ -101,7 +101,7 @@ class BNOG_Bunny_Auth {
      */
     public function get_auth_url() {
         $site_url     = site_url();
-        $callback_url = admin_url( 'admin.php?page=bunny-net-offload-gelform' );
+        $callback_url = admin_url( 'options-general.php?page=bunny-net-offload-gelform' );
 
         // Generate state parameter for CSRF protection.
         $state = wp_create_nonce( 'bnog_auth_' . get_current_user_id() );
@@ -180,7 +180,7 @@ class BNOG_Bunny_Auth {
         // Validate the API key by making a test request.
         if ( ! $this->validate_api_key( $api_key ) ) {
             set_transient( 'bnog_auth_error', __( 'Invalid API key received. Please try again.', 'bunny-net-offload-gelform' ), 60 );
-            wp_safe_redirect( admin_url( 'admin.php?page=bunny-net-offload-gelform&auth=failed' ) );
+            wp_safe_redirect( admin_url( 'options-general.php?page=bunny-net-offload-gelform&auth=failed' ) );
             exit;
         }
 
@@ -188,7 +188,7 @@ class BNOG_Bunny_Auth {
         $this->set_api_key( $api_key );
 
         // Redirect to success (remove API key from URL).
-        wp_safe_redirect( admin_url( 'admin.php?page=bunny-net-offload-gelform&auth=success' ) );
+        wp_safe_redirect( admin_url( 'options-general.php?page=bunny-net-offload-gelform&auth=success' ) );
         exit;
     }
 
@@ -224,8 +224,10 @@ class BNOG_Bunny_Auth {
      * AJAX handler for disconnecting from Bunny.net.
      */
     public function ajax_disconnect() {
-        // Verify nonce.
-        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
 
         // Verify capabilities.
         if ( ! current_user_can( 'manage_options' ) ) {
