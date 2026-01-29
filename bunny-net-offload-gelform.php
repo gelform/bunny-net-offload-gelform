@@ -146,6 +146,23 @@ final class Bunny_Net_Offload_Gelform {
         register_deactivation_hook( BNOG_PLUGIN_FILE, array( $this, 'deactivate' ) );
 
         add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
+        add_filter( 'plugin_action_links_' . plugin_basename( BNOG_PLUGIN_FILE ), array( $this, 'add_settings_link' ) );
+    }
+
+    /**
+     * Add settings link to plugin listing.
+     *
+     * @param array $links Existing plugin action links.
+     * @return array Modified links.
+     */
+    public function add_settings_link( $links ) {
+        $settings_link = sprintf(
+            '<a href="%s">%s</a>',
+            admin_url( 'options-general.php?page=bunny-net-offload-gelform' ),
+            __( 'Settings', 'bunny-net-offload-gelform' )
+        );
+        array_unshift( $links, $settings_link );
+        return $links;
     }
 
     /**

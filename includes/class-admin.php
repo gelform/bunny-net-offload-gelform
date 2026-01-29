@@ -272,9 +272,10 @@ class BNOG_Admin {
         $regions        = bunny_net_offload_gelform()->api->get_available_regions();
         $region_name    = isset( $regions[ $config['storage_region'] ] ) ? $regions[ $config['storage_region'] ]['name'] : $config['storage_region'];
 
-        // Check if sync is currently running.
-        $sync_status    = get_option( 'bnog_sync_status', array() );
-        $sync_running   = ! empty( $sync_status['running'] ) && ! empty( $sync_status['remaining'] ) && $sync_status['remaining'] > 0;
+        // Check if sync is currently running by looking at the queue.
+        $sync_status  = get_option( 'bnog_sync_status', array() );
+        $sync_queue   = get_option( 'bnog_upload_queue', array() );
+        $sync_running = ! empty( $sync_status['running'] ) && ! empty( $sync_queue );
         ?>
         <div class="bnog-card bnog-card-configured">
             <div class="bnog-card-header">
@@ -329,7 +330,7 @@ class BNOG_Admin {
                                         <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
                                     </span>
                                     <span class="bnog-stat bnog-stat-pending">
-                                        <strong><?php echo esc_html( number_format( $sync_status['remaining'] ) ); ?></strong>
+                                        <strong><?php echo esc_html( number_format( count( $sync_queue ) ) ); ?></strong>
                                         <?php esc_html_e( 'remaining', 'bunny-net-offload-gelform' ); ?>
                                     </span>
                                 </div>

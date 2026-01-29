@@ -305,6 +305,9 @@ class BNOG_Media_Handler {
             if ( is_wp_error( $processed ) ) {
                 bunny_net_offload_gelform()->log( 'Image processing failed during sync: ' . $processed->get_error_message(), 'warning' );
                 // Continue with original file.
+            } else {
+                // Update attachment metadata with new dimensions.
+                $this->update_attachment_dimensions( $attachment_id, $main_file );
             }
         }
 
@@ -320,7 +323,8 @@ class BNOG_Media_Handler {
         update_post_meta( $attachment_id, '_bnog_synced', true );
 
         // Sync thumbnails.
-        $metadata = wp_get_attachment_metadata( $attachment_id );
+        $metadata         = wp_get_attachment_metadata( $attachment_id );
+        $metadata_updated = false;
 
         if ( ! empty( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
             $upload_dir = dirname( $main_file );
@@ -334,7 +338,17 @@ class BNOG_Media_Handler {
 
                 // Process thumbnail if resize option is enabled.
                 if ( $resize_before_sync && bunny_net_offload_gelform()->image_processor->is_processable_image( $thumb_file ) ) {
-                    bunny_net_offload_gelform()->image_processor->process( $thumb_file );
+                    $processed = bunny_net_offload_gelform()->image_processor->process( $thumb_file );
+
+                    // Update thumbnail dimensions in metadata if processed.
+                    if ( ! is_wp_error( $processed ) ) {
+                        $thumb_size = wp_getimagesize( $thumb_file );
+                        if ( $thumb_size ) {
+                            $metadata['sizes'][ $size_name ]['width']  = $thumb_size[0];
+                            $metadata['sizes'][ $size_name ]['height'] = $thumb_size[1];
+                            $metadata_updated = true;
+                        }
+                    }
                 }
 
                 $thumb_remote_path = bunny_net_offload_gelform()->storage->path_to_remote_path( $thumb_file );
@@ -346,7 +360,58 @@ class BNOG_Media_Handler {
             }
         }
 
+        // Save updated metadata if thumbnails were resized.
+        if ( $metadata_updated ) {
+            wp_update_attachment_metadata( $attachment_id, $metadata );
+        }
+
         return true;
+    }
+
+    /**
+     * Update attachment metadata with new dimensions after resize.
+     *
+     * @param int    $attachment_id Attachment ID.
+     * @param string $file_path     Path to the resized file.
+     */
+    private function update_attachment_dimensions( $attachment_id, $file_path ) {
+        if ( ! file_exists( $file_path ) ) {
+            return;
+        }
+
+        // Get new dimensions from file.
+        $image_size = wp_getimagesize( $file_path );
+
+        if ( ! $image_size ) {
+            return;
+        }
+
+        $new_width  = $image_size[0];
+        $new_height = $image_size[1];
+
+        // Get current metadata.
+        $metadata = wp_get_attachment_metadata( $attachment_id );
+
+        if ( ! is_array( $metadata ) ) {
+            $metadata = array();
+        }
+
+        // Update dimensions.
+        $metadata['width']  = $new_width;
+        $metadata['height'] = $new_height;
+
+        // Update the metadata in database.
+        wp_update_attachment_metadata( $attachment_id, $metadata );
+
+        bunny_net_offload_gelform()->log(
+            sprintf(
+                'Updated attachment %d metadata: %dx%d',
+                $attachment_id,
+                $new_width,
+                $new_height
+            ),
+            'info'
+        );
     }
 
     /**
