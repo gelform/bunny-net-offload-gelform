@@ -141,8 +141,15 @@ class BNOG_Bunny_Auth {
                 if ( 'page' !== $key ) {
                     $sanitized_value = sanitize_text_field( wp_unslash( $value ) );
                     // Mask sensitive values to prevent logging credentials.
-                    if ( in_array( $key, $sensitive_keys, true ) && strlen( $sanitized_value ) > 8 ) {
-                        $params[ $key ] = substr( $sanitized_value, 0, 4 ) . '****' . substr( $sanitized_value, -4 );
+                    if ( in_array( $key, $sensitive_keys, true ) ) {
+                        $len = strlen( $sanitized_value );
+                        if ( $len > 8 ) {
+                            // Show first 4 and last 4 characters.
+                            $params[ $key ] = substr( $sanitized_value, 0, 4 ) . '****' . substr( $sanitized_value, -4 );
+                        } else {
+                            // For short values, mask entirely.
+                            $params[ $key ] = str_repeat( '*', $len );
+                        }
                     } else {
                         $params[ $key ] = $sanitized_value;
                     }
