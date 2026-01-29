@@ -1,0 +1,532 @@
+<?php
+/**
+ * Admin Settings Page
+ *
+ * Handles the plugin's admin interface.
+ *
+ * @package BunnyNetOffloadGelform
+ * @since 1.0.0
+ */
+
+// Prevent direct access.
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+/**
+ * Admin class.
+ *
+ * @since 1.0.0
+ */
+class BNOG_Admin {
+
+    /**
+     * Admin page slug.
+     *
+     * @var string
+     */
+    const PAGE_SLUG = 'bunny-net-offload-gelform';
+
+    /**
+     * Constructor.
+     */
+    public function __construct() {
+        add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+        add_action( 'admin_notices', array( $this, 'display_notices' ) );
+
+        // AJAX handlers.
+        add_action( 'wp_ajax_bnog_setup_cdn', array( $this, 'ajax_setup_cdn' ) );
+        add_action( 'wp_ajax_bnog_save_settings', array( $this, 'ajax_save_settings' ) );
+        add_action( 'wp_ajax_bnog_purge_cache', array( $this, 'ajax_purge_cache' ) );
+    }
+
+    /**
+     * Add admin menu page.
+     */
+    public function add_menu_page() {
+        add_options_page(
+            __( 'bunny.net offload', 'bunny-net-offload-gelform' ),
+            __( 'bunny.net offload', 'bunny-net-offload-gelform' ),
+            'manage_options',
+            self::PAGE_SLUG,
+            array( $this, 'render_page' )
+        );
+    }
+
+    /**
+     * Enqueue admin assets.
+     *
+     * @param string $hook Current admin page hook.
+     */
+    public function enqueue_assets( $hook ) {
+        if ( 'settings_page_' . self::PAGE_SLUG !== $hook ) {
+            return;
+        }
+
+        wp_enqueue_style(
+            'bnog-admin',
+            BNOG_PLUGIN_URL . 'assets/admin.css',
+            array(),
+            BNOG_VERSION
+        );
+
+        wp_enqueue_script(
+            'bnog-admin',
+            BNOG_PLUGIN_URL . 'assets/admin.js',
+            array( 'jquery' ),
+            BNOG_VERSION,
+            true
+        );
+
+        wp_localize_script(
+            'bnog-admin',
+            'bnogAdmin',
+            array(
+                'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
+                'nonce'     => wp_create_nonce( 'bnog_admin_nonce' ),
+                'authUrl'   => bunny_net_offload_gelform()->auth->get_auth_url(),
+                'strings'   => array(
+                    'settingUp'     => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
+                    'success'       => __( 'Success!', 'bunny-net-offload-gelform' ),
+                    'error'         => __( 'Error', 'bunny-net-offload-gelform' ),
+                    'saving'        => __( 'Saving...', 'bunny-net-offload-gelform' ),
+                    'saved'         => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
+                    'syncing'       => __( 'Syncing...', 'bunny-net-offload-gelform' ),
+                    'syncComplete'  => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
+                    'confirmDelete' => __( 'Are you sure you want to disconnect? This will not delete your CDN content.', 'bunny-net-offload-gelform' ),
+                    'purging'       => __( 'Purging cache...', 'bunny-net-offload-gelform' ),
+                    'purged'        => __( 'Cache purged!', 'bunny-net-offload-gelform' ),
+                ),
+            )
+        );
+    }
+
+    /**
+     * Display admin notices.
+     */
+    public function display_notices() {
+        // Check for auth callback result.
+        if ( isset( $_GET['page'] ) && self::PAGE_SLUG === $_GET['page'] ) {
+            if ( isset( $_GET['auth'] ) ) {
+                if ( 'success' === $_GET['auth'] ) {
+                    echo '<div class="notice notice-success is-dismissible"><p>';
+                    esc_html_e( 'Successfully connected to Bunny.net!', 'bunny-net-offload-gelform' );
+                    echo '</p></div>';
+                } elseif ( 'failed' === $_GET['auth'] ) {
+                    $error = get_transient( 'bnog_auth_error' );
+                    delete_transient( 'bnog_auth_error' );
+
+                    echo '<div class="notice notice-error is-dismissible"><p>';
+                    if ( $error ) {
+                        echo esc_html( $error );
+                    } else {
+                        esc_html_e( 'Failed to connect to Bunny.net. Please try again.', 'bunny-net-offload-gelform' );
+                    }
+                    echo '</p></div>';
+                }
+            }
+
+            // Debug: Show callback parameters if WP_DEBUG is on.
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                $debug_params = get_transient( 'bnog_debug_callback_params' );
+                if ( $debug_params ) {
+                    delete_transient( 'bnog_debug_callback_params' );
+                    echo '<div class="notice notice-info is-dismissible"><p>';
+                    echo '<strong>Debug - Callback parameters received:</strong><br>';
+                    echo '<code>' . esc_html( wp_json_encode( $debug_params, JSON_PRETTY_PRINT ) ) . '</code>';
+                    echo '</p></div>';
+                }
+            }
+        }
+    }
+
+    /**
+     * Render the settings page.
+     */
+    public function render_page() {
+        $is_connected  = bunny_net_offload_gelform()->is_connected();
+        $is_configured = bunny_net_offload_gelform()->is_configured();
+        $config        = bunny_net_offload_gelform()->get_config();
+
+        ?>
+        <div class="wrap bnog-admin-wrap">
+            <h1><?php esc_html_e( 'bunny.net offload by Gelform', 'bunny-net-offload-gelform' ); ?></h1>
+
+            <div class="bnog-container">
+                <?php if ( ! $is_connected ) : ?>
+                    <?php $this->render_connect_screen(); ?>
+                <?php elseif ( ! $is_configured ) : ?>
+                    <?php $this->render_setup_screen( $config ); ?>
+                <?php else : ?>
+                    <?php $this->render_configured_screen( $config ); ?>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the connect screen (not connected).
+     */
+    private function render_connect_screen() {
+        $auth_url = bunny_net_offload_gelform()->auth->get_auth_url();
+        ?>
+        <div class="bnog-card bnog-card-connect">
+            <div class="bnog-card-header">
+                <h2><?php esc_html_e( 'Connect to Bunny.net', 'bunny-net-offload-gelform' ); ?></h2>
+            </div>
+            <div class="bnog-card-body">
+                <p class="bnog-description">
+                    <?php esc_html_e( 'Connect your Bunny.net account to automatically optimize and serve images from a global CDN.', 'bunny-net-offload-gelform' ); ?>
+                </p>
+
+                <a href="<?php echo esc_url( $auth_url ); ?>" class="button button-primary button-hero bnog-connect-btn" id="bnog-connect">
+                    <span class="dashicons dashicons-cloud"></span>
+                    <?php esc_html_e( 'Connect to Bunny.net', 'bunny-net-offload-gelform' ); ?>
+                </a>
+
+                <p class="bnog-signup-link">
+                    <?php
+                    printf(
+                        /* translators: %s: Bunny.net signup URL */
+                        esc_html__( "Don't have an account? %s", 'bunny-net-offload-gelform' ),
+                        '<a href="https://bunny.net/?ref=bunny-net-offload-gelform" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Sign up free', 'bunny-net-offload-gelform' ) . '</a>'
+                    );
+                    ?>
+                </p>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the setup screen (connected but not configured).
+     *
+     * @param array $config Current configuration.
+     */
+    private function render_setup_screen( $config ) {
+        $regions = bunny_net_offload_gelform()->api->get_available_regions();
+        ?>
+        <div class="bnog-card bnog-card-setup">
+            <div class="bnog-card-header">
+                <h2>
+                    <span class="bnog-status-icon bnog-status-connected"></span>
+                    <?php esc_html_e( 'Connected to Bunny.net', 'bunny-net-offload-gelform' ); ?>
+                </h2>
+                <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
+                    <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
+                </button>
+            </div>
+            <div class="bnog-card-body">
+                <form id="bnog-setup-form">
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-region"><?php esc_html_e( 'Storage Region', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <select name="region" id="bnog-region" class="regular-text">
+                                    <option value="DE"><?php esc_html_e( 'Frankfurt, Germany (Recommended)', 'bunny-net-offload-gelform' ); ?></option>
+                                    <?php foreach ( $regions as $code => $region ) : ?>
+                                        <?php if ( 'DE' !== $code ) : ?>
+                                            <option value="<?php echo esc_attr( $code ); ?>">
+                                                <?php echo esc_html( $region['name'] ); ?>
+                                            </option>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </select>
+                                <p class="description">
+                                    <?php esc_html_e( 'Choose a region closest to your primary audience.', 'bunny-net-offload-gelform' ); ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-max-width"><?php esc_html_e( 'Max Image Width', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <input type="number" name="max_width" id="bnog-max-width"
+                                       value="<?php echo esc_attr( isset( $config['max_width'] ) ? $config['max_width'] : 2048 ); ?>"
+                                       min="100" max="10000" step="1" class="small-text">
+                                <span class="description"><?php esc_html_e( 'px', 'bunny-net-offload-gelform' ); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-jpeg-quality"><?php esc_html_e( 'JPEG Quality', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <input type="range" name="jpeg_quality" id="bnog-jpeg-quality"
+                                       value="<?php echo esc_attr( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>"
+                                       min="1" max="100" step="1" class="bnog-range-input">
+                                <span class="bnog-range-value" id="bnog-jpeg-quality-value">
+                                    <?php echo esc_html( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>%
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div class="bnog-setup-action">
+                        <button type="submit" class="button button-primary button-hero" id="bnog-setup-btn">
+                            <span class="dashicons dashicons-admin-site-alt3"></span>
+                            <?php esc_html_e( 'Set Up CDN', 'bunny-net-offload-gelform' ); ?>
+                        </button>
+                        <span class="spinner"></span>
+                        <span class="bnog-status-message"></span>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the configured screen (fully set up).
+     *
+     * @param array $config Current configuration.
+     */
+    private function render_configured_screen( $config ) {
+        $synced_count   = bunny_net_offload_gelform()->media_handler->get_synced_count();
+        $unsynced_count = bunny_net_offload_gelform()->media_handler->get_unsynced_count();
+        $regions        = bunny_net_offload_gelform()->api->get_available_regions();
+        $region_name    = isset( $regions[ $config['storage_region'] ] ) ? $regions[ $config['storage_region'] ]['name'] : $config['storage_region'];
+        ?>
+        <div class="bnog-card bnog-card-configured">
+            <div class="bnog-card-header">
+                <h2>
+                    <span class="bnog-status-icon bnog-status-active"></span>
+                    <?php esc_html_e( 'Connected & Active', 'bunny-net-offload-gelform' ); ?>
+                </h2>
+                <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
+                    <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
+                </button>
+            </div>
+            <div class="bnog-card-body">
+                <div class="bnog-info-grid">
+                    <div class="bnog-info-item">
+                        <label><?php esc_html_e( 'CDN URL', 'bunny-net-offload-gelform' ); ?></label>
+                        <code><?php echo esc_html( str_replace( 'https://', '', $config['cdn_url'] ) ); ?></code>
+                    </div>
+                    <div class="bnog-info-item">
+                        <label><?php esc_html_e( 'Storage Zone', 'bunny-net-offload-gelform' ); ?></label>
+                        <code><?php echo esc_html( $config['storage_zone_name'] ); ?></code>
+                    </div>
+                    <div class="bnog-info-item">
+                        <label><?php esc_html_e( 'Region', 'bunny-net-offload-gelform' ); ?></label>
+                        <span><?php echo esc_html( $region_name ); ?></span>
+                    </div>
+                </div>
+
+                <hr class="bnog-divider">
+
+                <h3><?php esc_html_e( 'Image Settings', 'bunny-net-offload-gelform' ); ?></h3>
+
+                <form id="bnog-settings-form">
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-max-width"><?php esc_html_e( 'Max Width', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <input type="number" name="max_width" id="bnog-max-width"
+                                       value="<?php echo esc_attr( isset( $config['max_width'] ) ? $config['max_width'] : 2048 ); ?>"
+                                       min="100" max="10000" step="1" class="small-text">
+                                <span class="description"><?php esc_html_e( 'px', 'bunny-net-offload-gelform' ); ?></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-jpeg-quality"><?php esc_html_e( 'JPEG Quality', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <input type="range" name="jpeg_quality" id="bnog-jpeg-quality"
+                                       value="<?php echo esc_attr( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>"
+                                       min="1" max="100" step="1" class="bnog-range-input">
+                                <span class="bnog-range-value" id="bnog-jpeg-quality-value">
+                                    <?php echo esc_html( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>%
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-keep-local"><?php esc_html_e( 'Keep Local Files', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <label>
+                                    <input type="checkbox" name="keep_local_files" id="bnog-keep-local" value="1"
+                                        <?php checked( ! empty( $config['keep_local_files'] ) ); ?>>
+                                    <?php esc_html_e( 'Keep original files on your server after uploading to CDN', 'bunny-net-offload-gelform' ); ?>
+                                </label>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <p class="submit">
+                        <button type="submit" class="button button-primary" id="bnog-save-btn">
+                            <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
+                        </button>
+                        <span class="spinner"></span>
+                        <span class="bnog-status-message"></span>
+                    </p>
+                </form>
+
+                <hr class="bnog-divider">
+
+                <h3><?php esc_html_e( 'Sync', 'bunny-net-offload-gelform' ); ?></h3>
+
+                <div class="bnog-sync-section">
+                    <div class="bnog-sync-stats">
+                        <span class="bnog-stat">
+                            <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
+                            <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
+                        </span>
+                        <?php if ( $unsynced_count > 0 ) : ?>
+                            <span class="bnog-stat bnog-stat-pending">
+                                <strong><?php echo esc_html( number_format( $unsynced_count ) ); ?></strong>
+                                <?php esc_html_e( 'waiting to sync', 'bunny-net-offload-gelform' ); ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ( $unsynced_count > 0 ) : ?>
+                        <div class="bnog-sync-actions">
+                            <button type="button" class="button" id="bnog-sync-btn">
+                                <?php esc_html_e( 'Sync Existing Media', 'bunny-net-offload-gelform' ); ?>
+                            </button>
+                            <span class="spinner"></span>
+                            <span class="bnog-sync-progress"></span>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <hr class="bnog-divider">
+
+                <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
+
+                <div class="bnog-cache-section">
+                    <button type="button" class="button" id="bnog-purge-btn">
+                        <?php esc_html_e( 'Purge CDN Cache', 'bunny-net-offload-gelform' ); ?>
+                    </button>
+                    <span class="spinner"></span>
+                    <span class="bnog-status-message"></span>
+                    <p class="description">
+                        <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * AJAX handler for CDN setup.
+     */
+    public function ajax_setup_cdn() {
+        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        // Get settings from request.
+        $region       = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : 'DE';
+        $max_width    = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
+        $jpeg_quality = isset( $_POST['jpeg_quality'] ) ? absint( $_POST['jpeg_quality'] ) : 85;
+
+        // Validate region.
+        $valid_regions = array_keys( bunny_net_offload_gelform()->api->get_available_regions() );
+        if ( ! in_array( $region, $valid_regions, true ) ) {
+            $region = 'DE';
+        }
+
+        // Validate quality.
+        $jpeg_quality = max( 1, min( 100, $jpeg_quality ) );
+
+        // Setup CDN.
+        $result = bunny_net_offload_gelform()->api->setup_cdn( $region );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        // Encrypt the storage password before storing.
+        $result['storage_zone_password'] = bunny_net_offload_gelform()->auth->encrypt_value( $result['storage_zone_password'] );
+
+        // Save configuration.
+        $config = array_merge(
+            $result,
+            array(
+                'max_width'        => $max_width,
+                'max_height'       => $max_width, // Keep square for now.
+                'jpeg_quality'     => $jpeg_quality,
+                'png_compression'  => 6,
+                'keep_local_files' => true,
+            )
+        );
+
+        update_option( 'bnog_config', $config );
+
+        wp_send_json_success(
+            array(
+                'message' => sprintf(
+                    /* translators: %s: CDN URL */
+                    __( 'Your CDN is ready! Images will be served from %s', 'bunny-net-offload-gelform' ),
+                    str_replace( 'https://', '', $result['cdn_url'] )
+                ),
+                'cdn_url' => $result['cdn_url'],
+            )
+        );
+    }
+
+    /**
+     * AJAX handler for saving settings.
+     */
+    public function ajax_save_settings() {
+        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        $config = bunny_net_offload_gelform()->get_config();
+
+        // Update settings.
+        $config['max_width']        = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
+        $config['max_height']       = $config['max_width'];
+        $config['jpeg_quality']     = isset( $_POST['jpeg_quality'] ) ? max( 1, min( 100, absint( $_POST['jpeg_quality'] ) ) ) : 85;
+        $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
+
+        update_option( 'bnog_config', $config );
+
+        wp_send_json_success( array( 'message' => __( 'Settings saved!', 'bunny-net-offload-gelform' ) ) );
+    }
+
+    /**
+     * AJAX handler for purging cache.
+     */
+    public function ajax_purge_cache() {
+        check_ajax_referer( 'bnog_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        $config = bunny_net_offload_gelform()->get_config();
+
+        if ( empty( $config['pull_zone_id'] ) ) {
+            wp_send_json_error( array( 'message' => __( 'CDN is not configured.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        $result = bunny_net_offload_gelform()->api->purge_cache( $config['pull_zone_id'] );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        // Clear local availability cache.
+        bunny_net_offload_gelform()->url_rewriter->clear_availability_cache();
+
+        wp_send_json_success( array( 'message' => __( 'CDN cache purged successfully!', 'bunny-net-offload-gelform' ) ) );
+    }
+}

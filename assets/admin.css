@@ -1,0 +1,337 @@
+/**
+ * bunny.net offload by Gelform - Admin Styles
+ *
+ * @package BunnyNetOffloadGelform
+ * @since 1.0.0
+ */
+
+/* Container */
+.bnog-admin-wrap {
+    max-width: 800px;
+}
+
+.bnog-container {
+    margin-top: 20px;
+}
+
+/* Cards */
+.bnog-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.bnog-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f6f7f7;
+}
+
+.bnog-card-header h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bnog-card-body {
+    padding: 20px;
+}
+
+/* Status Icons */
+.bnog-status-icon {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.bnog-status-connected {
+    background-color: #00a32a;
+}
+
+.bnog-status-active {
+    background-color: #00a32a;
+    animation: bnog-pulse 2s infinite;
+}
+
+@keyframes bnog-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 163, 42, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(0, 163, 42, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 163, 42, 0);
+    }
+}
+
+/* Connect Screen */
+.bnog-card-connect .bnog-card-body {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.bnog-description {
+    font-size: 14px;
+    color: #50575e;
+    margin-bottom: 25px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.bnog-connect-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 30px !important;
+    height: auto !important;
+    font-size: 15px !important;
+}
+
+.bnog-connect-btn .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.bnog-signup-link {
+    margin-top: 20px;
+    font-size: 13px;
+    color: #787c82;
+}
+
+.bnog-signup-link a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.bnog-signup-link a:hover {
+    text-decoration: underline;
+}
+
+/* Disconnect Button */
+.bnog-disconnect-btn {
+    color: #a00 !important;
+    text-decoration: none;
+}
+
+.bnog-disconnect-btn:hover {
+    color: #dc3232 !important;
+}
+
+/* Form Styles */
+.bnog-card .form-table th {
+    width: 150px;
+    padding-left: 0;
+}
+
+.bnog-card .form-table td {
+    padding-left: 0;
+}
+
+/* Range Input */
+.bnog-range-input {
+    width: 200px;
+    vertical-align: middle;
+}
+
+.bnog-range-value {
+    display: inline-block;
+    min-width: 45px;
+    margin-left: 10px;
+    font-weight: 500;
+}
+
+/* Setup Action */
+.bnog-setup-action {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bnog-setup-action .button-hero {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+}
+
+.bnog-setup-action .button-hero .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.bnog-setup-action .spinner {
+    float: none;
+    margin: 0;
+}
+
+.bnog-status-message {
+    font-size: 13px;
+}
+
+.bnog-status-message.success {
+    color: #00a32a;
+}
+
+.bnog-status-message.error {
+    color: #d63638;
+}
+
+/* Info Grid */
+.bnog-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.bnog-info-item {
+    padding: 12px 15px;
+    background: #f6f7f7;
+    border-radius: 4px;
+}
+
+.bnog-info-item label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #787c82;
+    margin-bottom: 5px;
+}
+
+.bnog-info-item code {
+    font-size: 13px;
+    padding: 0;
+    background: none;
+}
+
+/* Divider */
+.bnog-divider {
+    margin: 25px 0;
+    border: none;
+    border-top: 1px solid #c3c4c7;
+}
+
+/* Section Headers */
+.bnog-card-body h3 {
+    margin: 0 0 15px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #50575e;
+}
+
+/* Sync Section */
+.bnog-sync-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.bnog-sync-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.bnog-stat {
+    font-size: 14px;
+    color: #50575e;
+}
+
+.bnog-stat strong {
+    color: #1d2327;
+}
+
+.bnog-stat-pending strong {
+    color: #dba617;
+}
+
+.bnog-sync-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bnog-sync-actions .spinner {
+    float: none;
+    margin: 0;
+}
+
+.bnog-sync-progress {
+    font-size: 13px;
+    color: #50575e;
+}
+
+/* Cache Section */
+.bnog-cache-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.bnog-cache-section .spinner {
+    float: none;
+    margin: 0;
+}
+
+.bnog-cache-section .description {
+    flex-basis: 100%;
+    margin-top: 5px;
+}
+
+/* Submit Section */
+.bnog-card .submit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+}
+
+.bnog-card .submit .spinner {
+    float: none;
+    margin: 0;
+}
+
+/* Loading State */
+.bnog-loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.bnog-loading .spinner {
+    visibility: visible;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .bnog-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .bnog-card .form-table th {
+        width: auto;
+    }
+
+    .bnog-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .bnog-sync-stats {
+        flex-direction: column;
+        gap: 5px;
+    }
+}
