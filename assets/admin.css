@@ -1,5 +1,5 @@
 /**
- * bunny.net offload by Gelform - Admin Styles
+ * Bunny.net Offload by Gelform - Admin Styles
  *
  * @package BunnyNetOffloadGelform
  * @since 1.0.0
@@ -42,6 +42,54 @@
 
 .bnog-card-body {
     padding: 20px;
+}
+
+/* Tabs */
+.bnog-tabs-nav {
+    display: flex;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f6f7f7;
+    padding: 0 15px;
+    gap: 0;
+}
+
+.bnog-tab-btn {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: #50575e;
+    transition: all 0.15s ease;
+}
+
+.bnog-tab-btn:hover {
+    color: #1d2327;
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.bnog-tab-btn.active {
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+    background: #fff;
+}
+
+.bnog-tab-content {
+    display: none;
+}
+
+.bnog-tab-content.active {
+    display: block;
+}
+
+/* Setup description */
+.bnog-setup-description {
+    font-size: 14px;
+    color: #50575e;
+    margin-bottom: 20px;
 }
 
 /* Status Icons */
@@ -256,6 +304,27 @@
     color: #dba617;
 }
 
+.bnog-sync-options {
+    margin-bottom: 10px;
+}
+
+.bnog-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.bnog-checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.bnog-sync-options .description {
+    margin: 5px 0 0 22px;
+    font-size: 12px;
+}
+
 .bnog-sync-actions {
     display: flex;
     align-items: center;
@@ -270,6 +339,32 @@
 .bnog-sync-progress {
     font-size: 13px;
     color: #50575e;
+}
+
+/* Sync In Progress */
+.bnog-sync-running-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.bnog-sync-running-notice .spinner {
+    float: none;
+    margin: 0;
+}
+
+.bnog-sync-running-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2271b1;
+}
+
+.bnog-sync-notice {
+    font-size: 13px;
+    color: #50575e;
+    font-style: italic;
+    margin-top: 10px;
 }
 
 /* Cache Section */

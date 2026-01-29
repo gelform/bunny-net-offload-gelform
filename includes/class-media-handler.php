@@ -271,11 +271,15 @@ class BNOG_Media_Handler {
             return;
         }
 
+        // Get sync status to check resize option.
+        $status             = get_option( 'bnog_sync_status', array() );
+        $resize_before_sync = ! empty( $status['resize_before_sync'] );
+
         // Process in batches of 10.
         $batch = array_slice( $queue, 0, 10 );
 
         foreach ( $batch as $attachment_id ) {
-            $this->sync_attachment( $attachment_id );
+            $this->sync_attachment( $attachment_id, $resize_before_sync );
             $this->remove_from_queue( $attachment_id );
         }
     }
@@ -283,14 +287,25 @@ class BNOG_Media_Handler {
     /**
      * Sync a single attachment to CDN.
      *
-     * @param int $attachment_id Attachment ID.
+     * @param int  $attachment_id     Attachment ID.
+     * @param bool $resize_before_sync Whether to resize/compress before syncing.
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
-    public function sync_attachment( $attachment_id ) {
+    public function sync_attachment( $attachment_id, $resize_before_sync = false ) {
         $main_file = get_attached_file( $attachment_id );
 
         if ( ! $main_file || ! file_exists( $main_file ) ) {
             return new WP_Error( 'file_not_found', __( 'Attachment file not found.', 'bunny-net-offload-gelform' ) );
+        }
+
+        // Process image if resize option is enabled.
+        if ( $resize_before_sync && bunny_net_offload_gelform()->image_processor->is_processable_image( $main_file ) ) {
+            $processed = bunny_net_offload_gelform()->image_processor->process( $main_file );
+
+            if ( is_wp_error( $processed ) ) {
+                bunny_net_offload_gelform()->log( 'Image processing failed during sync: ' . $processed->get_error_message(), 'warning' );
+                // Continue with original file.
+            }
         }
 
         // Upload main file.
@@ -317,6 +332,11 @@ class BNOG_Media_Handler {
                     continue;
                 }
 
+                // Process thumbnail if resize option is enabled.
+                if ( $resize_before_sync && bunny_net_offload_gelform()->image_processor->is_processable_image( $thumb_file ) ) {
+                    bunny_net_offload_gelform()->image_processor->process( $thumb_file );
+                }
+
                 $thumb_remote_path = bunny_net_offload_gelform()->storage->path_to_remote_path( $thumb_file );
                 $thumb_cdn_url     = bunny_net_offload_gelform()->storage->upload( $thumb_file, $thumb_remote_path );
 
@@ -338,6 +358,9 @@ class BNOG_Media_Handler {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
         }
+
+        // Get resize option.
+        $resize_before_sync = ! empty( $_POST['resize_before_sync'] );
 
         // Get all image attachments not yet synced.
         $args = array(
@@ -365,15 +388,16 @@ class BNOG_Media_Handler {
             );
         }
 
-        // Store sync status.
+        // Store sync status including resize option.
         update_option(
             'bnog_sync_status',
             array(
-                'total'     => count( $attachments ),
-                'processed' => 0,
-                'errors'    => 0,
-                'running'   => true,
-                'started'   => time(),
+                'total'              => count( $attachments ),
+                'processed'          => 0,
+                'errors'             => 0,
+                'running'            => true,
+                'started'            => time(),
+                'resize_before_sync' => $resize_before_sync,
             )
         );
 
@@ -384,11 +408,15 @@ class BNOG_Media_Handler {
         // Trigger immediate processing.
         wp_schedule_single_event( time(), 'bnog_process_queue' );
 
+        $message = $resize_before_sync
+            ? __( 'Syncing %d images with resizing. This will happen in the background.', 'bunny-net-offload-gelform' )
+            : __( 'Syncing %d images. This will happen in the background.', 'bunny-net-offload-gelform' );
+
         wp_send_json_success(
             array(
                 'message' => sprintf(
                     /* translators: %d: number of images */
-                    __( 'Syncing %d images. This will happen in the background.', 'bunny-net-offload-gelform' ),
+                    $message,
                     count( $attachments )
                 ),
                 'total'   => count( $attachments ),

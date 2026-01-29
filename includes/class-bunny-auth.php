@@ -142,7 +142,7 @@ class BNOG_Bunny_Auth {
             if ( ! empty( $params ) ) {
                 // Store for display on admin page.
                 set_transient( 'bnog_debug_callback_params', $params, 300 );
-                error_log( '[bunny.net offload] Callback params: ' . wp_json_encode( $params ) );
+                error_log( '[Bunny.net Offload] Callback params: ' . wp_json_encode( $params ) );
             }
         }
 

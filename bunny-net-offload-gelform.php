@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: bunny.net offload by Gelform
+ * Plugin Name: Bunny.net Offload by Gelform
  * Plugin URI: https://github.com/gelform/bunny-net-offload-gelform
  * Description: Dead-simple image optimization and CDN offloading using Bunny.net with OAuth-style authorization.
  * Version: 1.0.0
@@ -159,6 +159,7 @@ final class Bunny_Net_Offload_Gelform {
                 'max_height'       => 2048,
                 'jpeg_quality'     => 85,
                 'png_compression'  => 6,
+                'webp_quality'     => 82,
                 'keep_local_files' => true,
             );
             update_option( 'bnog_config', $defaults );
@@ -255,7 +256,7 @@ final class Bunny_Net_Offload_Gelform {
      */
     public function log( $message, $level = 'info' ) {
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            $prefix = sprintf( '[bunny.net offload][%s] ', strtoupper( $level ) );
+            $prefix = sprintf( '[Bunny.net Offload][%s] ', strtoupper( $level ) );
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             error_log( $prefix . $message );
         }

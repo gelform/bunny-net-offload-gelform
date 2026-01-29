@@ -1,5 +1,5 @@
 /**
- * bunny.net offload by Gelform - Admin JavaScript
+ * Bunny.net Offload by Gelform - Admin JavaScript
  *
  * @package BunnyNetOffloadGelform
  * @since 1.0.0
@@ -38,6 +38,9 @@
 
             // Purge cache button
             $('#bnog-purge-btn').on('click', this.handlePurgeCache);
+
+            // Tab switching
+            $('.bnog-tab-btn').on('click', this.handleTabSwitch);
         },
 
         /**
@@ -47,8 +50,35 @@
             $('.bnog-range-input').on('input', function() {
                 var $input = $(this);
                 var $value = $('#' + $input.attr('id') + '-value');
-                $value.text($input.val() + '%');
+                var inputId = $input.attr('id');
+
+                // PNG compression doesn't use percentage
+                if (inputId === 'bnog-png-compression') {
+                    $value.text($input.val());
+                } else {
+                    $value.text($input.val() + '%');
+                }
             });
+        },
+
+        /**
+         * Handle tab switching.
+         *
+         * @param {Event} e Click event.
+         */
+        handleTabSwitch: function(e) {
+            e.preventDefault();
+
+            var $btn = $(this);
+            var tab = $btn.data('tab');
+
+            // Update button states
+            $('.bnog-tab-btn').removeClass('active');
+            $btn.addClass('active');
+
+            // Update tab content
+            $('.bnog-tab-content').removeClass('active');
+            $('#bnog-tab-' + tab).addClass('active');
         },
 
         /**
@@ -124,9 +154,7 @@
                 data: {
                     action: 'bnog_setup_cdn',
                     nonce: bnogAdmin.nonce,
-                    region: $('#bnog-region').val(),
-                    max_width: $('#bnog-max-width').val(),
-                    jpeg_quality: $('#bnog-jpeg-quality').val()
+                    region: $('#bnog-region').val()
                 },
                 success: function(response) {
                     $form.removeClass('bnog-loading');
@@ -178,6 +206,8 @@
                     nonce: bnogAdmin.nonce,
                     max_width: $('#bnog-max-width').val(),
                     jpeg_quality: $('#bnog-jpeg-quality').val(),
+                    png_compression: $('#bnog-png-compression').val(),
+                    webp_quality: $('#bnog-webp-quality').val(),
                     keep_local_files: $('#bnog-keep-local').is(':checked') ? 1 : 0
                 },
                 success: function(response) {
@@ -225,13 +255,16 @@
                 type: 'POST',
                 data: {
                     action: 'bnog_sync_media',
-                    nonce: bnogAdmin.nonce
+                    nonce: bnogAdmin.nonce,
+                    resize_before_sync: $('#bnog-resize-before-sync').is(':checked') ? 1 : 0
                 },
                 success: function(response) {
                     if (response.success) {
                         $progress.text(response.data.message);
 
                         if (response.data.total > 0) {
+                            // Show notice that user can leave page
+                            $('.bnog-sync-notice').show();
                             // Start polling for progress
                             BNOGAdmin.pollSyncStatus($progress, $spinner, $btn);
                         } else {

@@ -46,8 +46,8 @@ class BNOG_Admin {
      */
     public function add_menu_page() {
         add_options_page(
-            __( 'bunny.net offload', 'bunny-net-offload-gelform' ),
-            __( 'bunny.net offload', 'bunny-net-offload-gelform' ),
+            __( 'Bunny.net Offload', 'bunny-net-offload-gelform' ),
+            __( 'Bunny.net Offload', 'bunny-net-offload-gelform' ),
             'manage_options',
             self::PAGE_SLUG,
             array( $this, 'render_page' )
@@ -151,7 +151,7 @@ class BNOG_Admin {
 
         ?>
         <div class="wrap bnog-admin-wrap">
-            <h1><?php esc_html_e( 'bunny.net offload by Gelform', 'bunny-net-offload-gelform' ); ?></h1>
+            <h1><?php esc_html_e( 'Bunny.net Offload by Gelform', 'bunny-net-offload-gelform' ); ?></h1>
 
             <div class="bnog-container">
                 <?php if ( ! $is_connected ) : ?>
@@ -219,6 +219,10 @@ class BNOG_Admin {
                 </button>
             </div>
             <div class="bnog-card-body">
+                <p class="bnog-setup-description">
+                    <?php esc_html_e( 'Select a storage region and we\'ll set up your CDN automatically. You can configure advanced settings after setup.', 'bunny-net-offload-gelform' ); ?>
+                </p>
+
                 <form id="bnog-setup-form">
                     <table class="form-table">
                         <tr>
@@ -227,9 +231,9 @@ class BNOG_Admin {
                             </th>
                             <td>
                                 <select name="region" id="bnog-region" class="regular-text">
-                                    <option value="DE"><?php esc_html_e( 'Frankfurt, Germany (Recommended)', 'bunny-net-offload-gelform' ); ?></option>
+                                    <option value="NY"><?php esc_html_e( 'New York, USA (Recommended)', 'bunny-net-offload-gelform' ); ?></option>
                                     <?php foreach ( $regions as $code => $region ) : ?>
-                                        <?php if ( 'DE' !== $code ) : ?>
+                                        <?php if ( 'NY' !== $code ) : ?>
                                             <option value="<?php echo esc_attr( $code ); ?>">
                                                 <?php echo esc_html( $region['name'] ); ?>
                                             </option>
@@ -239,30 +243,6 @@ class BNOG_Admin {
                                 <p class="description">
                                     <?php esc_html_e( 'Choose a region closest to your primary audience.', 'bunny-net-offload-gelform' ); ?>
                                 </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="bnog-max-width"><?php esc_html_e( 'Max Image Width', 'bunny-net-offload-gelform' ); ?></label>
-                            </th>
-                            <td>
-                                <input type="number" name="max_width" id="bnog-max-width"
-                                       value="<?php echo esc_attr( isset( $config['max_width'] ) ? $config['max_width'] : 2048 ); ?>"
-                                       min="100" max="10000" step="1" class="small-text">
-                                <span class="description"><?php esc_html_e( 'px', 'bunny-net-offload-gelform' ); ?></span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="bnog-jpeg-quality"><?php esc_html_e( 'JPEG Quality', 'bunny-net-offload-gelform' ); ?></label>
-                            </th>
-                            <td>
-                                <input type="range" name="jpeg_quality" id="bnog-jpeg-quality"
-                                       value="<?php echo esc_attr( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>"
-                                       min="1" max="100" step="1" class="bnog-range-input">
-                                <span class="bnog-range-value" id="bnog-jpeg-quality-value">
-                                    <?php echo esc_html( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>%
-                                </span>
                             </td>
                         </tr>
                     </table>
@@ -291,6 +271,10 @@ class BNOG_Admin {
         $unsynced_count = bunny_net_offload_gelform()->media_handler->get_unsynced_count();
         $regions        = bunny_net_offload_gelform()->api->get_available_regions();
         $region_name    = isset( $regions[ $config['storage_region'] ] ) ? $regions[ $config['storage_region'] ]['name'] : $config['storage_region'];
+
+        // Check if sync is currently running.
+        $sync_status    = get_option( 'bnog_sync_status', array() );
+        $sync_running   = ! empty( $sync_status['running'] ) && ! empty( $sync_status['remaining'] ) && $sync_status['remaining'] > 0;
         ?>
         <div class="bnog-card bnog-card-configured">
             <div class="bnog-card-header">
@@ -302,117 +286,227 @@ class BNOG_Admin {
                     <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
                 </button>
             </div>
-            <div class="bnog-card-body">
-                <div class="bnog-info-grid">
-                    <div class="bnog-info-item">
-                        <label><?php esc_html_e( 'CDN URL', 'bunny-net-offload-gelform' ); ?></label>
-                        <code><?php echo esc_html( str_replace( 'https://', '', $config['cdn_url'] ) ); ?></code>
-                    </div>
-                    <div class="bnog-info-item">
-                        <label><?php esc_html_e( 'Storage Zone', 'bunny-net-offload-gelform' ); ?></label>
-                        <code><?php echo esc_html( $config['storage_zone_name'] ); ?></code>
-                    </div>
-                    <div class="bnog-info-item">
-                        <label><?php esc_html_e( 'Region', 'bunny-net-offload-gelform' ); ?></label>
-                        <span><?php echo esc_html( $region_name ); ?></span>
-                    </div>
-                </div>
 
-                <hr class="bnog-divider">
+            <!-- Tab Navigation -->
+            <div class="bnog-tabs-nav">
+                <button type="button" class="bnog-tab-btn active" data-tab="status">
+                    <?php esc_html_e( 'Status', 'bunny-net-offload-gelform' ); ?>
+                </button>
+                <button type="button" class="bnog-tab-btn" data-tab="advanced">
+                    <?php esc_html_e( 'Advanced', 'bunny-net-offload-gelform' ); ?>
+                </button>
+            </div>
 
-                <h3><?php esc_html_e( 'Image Settings', 'bunny-net-offload-gelform' ); ?></h3>
+            <!-- Status Tab -->
+            <div class="bnog-tab-content active" id="bnog-tab-status">
+                <div class="bnog-card-body">
+                    <div class="bnog-info-grid">
+                        <div class="bnog-info-item">
+                            <label><?php esc_html_e( 'CDN URL', 'bunny-net-offload-gelform' ); ?></label>
+                            <code><?php echo esc_html( str_replace( 'https://', '', $config['cdn_url'] ) ); ?></code>
+                        </div>
+                        <div class="bnog-info-item">
+                            <label><?php esc_html_e( 'Storage Zone', 'bunny-net-offload-gelform' ); ?></label>
+                            <code><?php echo esc_html( $config['storage_zone_name'] ); ?></code>
+                        </div>
+                        <div class="bnog-info-item">
+                            <label><?php esc_html_e( 'Region', 'bunny-net-offload-gelform' ); ?></label>
+                            <span><?php echo esc_html( $region_name ); ?></span>
+                        </div>
+                    </div>
 
-                <form id="bnog-settings-form">
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="bnog-max-width"><?php esc_html_e( 'Max Width', 'bunny-net-offload-gelform' ); ?></label>
-                            </th>
-                            <td>
-                                <input type="number" name="max_width" id="bnog-max-width"
-                                       value="<?php echo esc_attr( isset( $config['max_width'] ) ? $config['max_width'] : 2048 ); ?>"
-                                       min="100" max="10000" step="1" class="small-text">
-                                <span class="description"><?php esc_html_e( 'px', 'bunny-net-offload-gelform' ); ?></span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="bnog-jpeg-quality"><?php esc_html_e( 'JPEG Quality', 'bunny-net-offload-gelform' ); ?></label>
-                            </th>
-                            <td>
-                                <input type="range" name="jpeg_quality" id="bnog-jpeg-quality"
-                                       value="<?php echo esc_attr( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>"
-                                       min="1" max="100" step="1" class="bnog-range-input">
-                                <span class="bnog-range-value" id="bnog-jpeg-quality-value">
-                                    <?php echo esc_html( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>%
+                    <hr class="bnog-divider">
+
+                    <h3><?php esc_html_e( 'Sync', 'bunny-net-offload-gelform' ); ?></h3>
+
+                    <div class="bnog-sync-section">
+                        <?php if ( $sync_running ) : ?>
+                            <!-- Sync in progress -->
+                            <div class="bnog-sync-in-progress">
+                                <div class="bnog-sync-stats">
+                                    <span class="bnog-stat">
+                                        <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
+                                        <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
+                                    </span>
+                                    <span class="bnog-stat bnog-stat-pending">
+                                        <strong><?php echo esc_html( number_format( $sync_status['remaining'] ) ); ?></strong>
+                                        <?php esc_html_e( 'remaining', 'bunny-net-offload-gelform' ); ?>
+                                    </span>
+                                </div>
+                                <div class="bnog-sync-running-notice">
+                                    <span class="spinner is-active"></span>
+                                    <span class="bnog-sync-running-text">
+                                        <?php esc_html_e( 'Syncing in progress...', 'bunny-net-offload-gelform' ); ?>
+                                    </span>
+                                </div>
+                                <p class="bnog-sync-notice">
+                                    <?php esc_html_e( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ); ?>
+                                </p>
+                            </div>
+                        <?php else : ?>
+                            <!-- Normal sync UI -->
+                            <div class="bnog-sync-stats">
+                                <span class="bnog-stat">
+                                    <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
+                                    <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
                                 </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="bnog-keep-local"><?php esc_html_e( 'Keep Local Files', 'bunny-net-offload-gelform' ); ?></label>
-                            </th>
-                            <td>
-                                <label>
-                                    <input type="checkbox" name="keep_local_files" id="bnog-keep-local" value="1"
-                                        <?php checked( ! empty( $config['keep_local_files'] ) ); ?>>
-                                    <?php esc_html_e( 'Keep original files on your server after uploading to CDN', 'bunny-net-offload-gelform' ); ?>
-                                </label>
-                            </td>
-                        </tr>
-                    </table>
+                                <?php if ( $unsynced_count > 0 ) : ?>
+                                    <span class="bnog-stat bnog-stat-pending">
+                                        <strong><?php echo esc_html( number_format( $unsynced_count ) ); ?></strong>
+                                        <?php esc_html_e( 'waiting to sync', 'bunny-net-offload-gelform' ); ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
 
-                    <p class="submit">
-                        <button type="submit" class="button button-primary" id="bnog-save-btn">
-                            <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
-                        </button>
-                        <span class="spinner"></span>
-                        <span class="bnog-status-message"></span>
-                    </p>
-                </form>
-
-                <hr class="bnog-divider">
-
-                <h3><?php esc_html_e( 'Sync', 'bunny-net-offload-gelform' ); ?></h3>
-
-                <div class="bnog-sync-section">
-                    <div class="bnog-sync-stats">
-                        <span class="bnog-stat">
-                            <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
-                            <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
-                        </span>
-                        <?php if ( $unsynced_count > 0 ) : ?>
-                            <span class="bnog-stat bnog-stat-pending">
-                                <strong><?php echo esc_html( number_format( $unsynced_count ) ); ?></strong>
-                                <?php esc_html_e( 'waiting to sync', 'bunny-net-offload-gelform' ); ?>
-                            </span>
+                            <?php if ( $unsynced_count > 0 ) : ?>
+                                <div class="bnog-sync-options">
+                                    <label class="bnog-checkbox-label">
+                                        <input type="checkbox" id="bnog-resize-before-sync" value="1">
+                                        <?php esc_html_e( 'Resize and compress images before syncing', 'bunny-net-offload-gelform' ); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Apply current compression settings to existing images. Syncing happens in the background.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </div>
+                                <div class="bnog-sync-actions">
+                                    <button type="button" class="button" id="bnog-sync-btn">
+                                        <?php esc_html_e( 'Start Sync of Existing Files', 'bunny-net-offload-gelform' ); ?>
+                                    </button>
+                                    <span class="spinner"></span>
+                                    <span class="bnog-sync-progress"></span>
+                                </div>
+                                <p class="bnog-sync-notice" style="display: none;">
+                                    <?php esc_html_e( 'You can leave this page. Syncing will continue in the background.', 'bunny-net-offload-gelform' ); ?>
+                                </p>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
 
-                    <?php if ( $unsynced_count > 0 ) : ?>
-                        <div class="bnog-sync-actions">
-                            <button type="button" class="button" id="bnog-sync-btn">
-                                <?php esc_html_e( 'Sync Existing Media', 'bunny-net-offload-gelform' ); ?>
+                    <hr class="bnog-divider">
+
+                    <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
+
+                    <div class="bnog-cache-section">
+                        <button type="button" class="button" id="bnog-purge-btn">
+                            <?php esc_html_e( 'Purge CDN Cache', 'bunny-net-offload-gelform' ); ?>
+                        </button>
+                        <span class="spinner"></span>
+                        <span class="bnog-status-message"></span>
+                        <p class="description">
+                            <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Tab -->
+            <div class="bnog-tab-content" id="bnog-tab-advanced">
+                <div class="bnog-card-body">
+                    <form id="bnog-settings-form">
+                        <h3><?php esc_html_e( 'Image Dimensions', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-max-width"><?php esc_html_e( 'Max Dimension', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <input type="number" name="max_width" id="bnog-max-width"
+                                           value="<?php echo esc_attr( isset( $config['max_width'] ) ? $config['max_width'] : 2048 ); ?>"
+                                           min="100" max="10000" step="1" class="small-text">
+                                    <span class="description"><?php esc_html_e( 'px', 'bunny-net-offload-gelform' ); ?></span>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Images will be resized proportionally so neither width nor height exceeds this value.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <hr class="bnog-divider">
+
+                        <h3><?php esc_html_e( 'Compression Settings', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-jpeg-quality"><?php esc_html_e( 'JPEG Quality', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <input type="range" name="jpeg_quality" id="bnog-jpeg-quality"
+                                           value="<?php echo esc_attr( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>"
+                                           min="1" max="100" step="1" class="bnog-range-input">
+                                    <span class="bnog-range-value" id="bnog-jpeg-quality-value">
+                                        <?php echo esc_html( isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85 ); ?>%
+                                    </span>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Higher values = better quality, larger files. Recommended: 80-90%.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-png-compression"><?php esc_html_e( 'PNG Compression', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <input type="range" name="png_compression" id="bnog-png-compression"
+                                           value="<?php echo esc_attr( isset( $config['png_compression'] ) ? $config['png_compression'] : 6 ); ?>"
+                                           min="0" max="9" step="1" class="bnog-range-input">
+                                    <span class="bnog-range-value" id="bnog-png-compression-value">
+                                        <?php echo esc_html( isset( $config['png_compression'] ) ? $config['png_compression'] : 6 ); ?>
+                                    </span>
+                                    <p class="description">
+                                        <?php esc_html_e( '0 = no compression (fastest), 9 = maximum compression (slowest). Recommended: 6.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-webp-quality"><?php esc_html_e( 'WebP Quality', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <input type="range" name="webp_quality" id="bnog-webp-quality"
+                                           value="<?php echo esc_attr( isset( $config['webp_quality'] ) ? $config['webp_quality'] : 82 ); ?>"
+                                           min="1" max="100" step="1" class="bnog-range-input">
+                                    <span class="bnog-range-value" id="bnog-webp-quality-value">
+                                        <?php echo esc_html( isset( $config['webp_quality'] ) ? $config['webp_quality'] : 82 ); ?>%
+                                    </span>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Quality for WebP conversion. WebP typically achieves similar quality at lower values than JPEG.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <hr class="bnog-divider">
+
+                        <h3><?php esc_html_e( 'Storage', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-keep-local"><?php esc_html_e( 'Keep Local Files', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="keep_local_files" id="bnog-keep-local" value="1"
+                                            <?php checked( ! empty( $config['keep_local_files'] ) ); ?>>
+                                        <?php esc_html_e( 'Keep original files on your server after uploading to CDN', 'bunny-net-offload-gelform' ); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e( 'Disable to save local disk space. Warning: If disabled, files cannot be recovered if removed from CDN.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <p class="submit">
+                            <button type="submit" class="button button-primary" id="bnog-save-btn">
+                                <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
                             </button>
                             <span class="spinner"></span>
-                            <span class="bnog-sync-progress"></span>
-                        </div>
-                    <?php endif; ?>
-                </div>
-
-                <hr class="bnog-divider">
-
-                <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
-
-                <div class="bnog-cache-section">
-                    <button type="button" class="button" id="bnog-purge-btn">
-                        <?php esc_html_e( 'Purge CDN Cache', 'bunny-net-offload-gelform' ); ?>
-                    </button>
-                    <span class="spinner"></span>
-                    <span class="bnog-status-message"></span>
-                    <p class="description">
-                        <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
-                    </p>
+                            <span class="bnog-status-message"></span>
+                        </p>
+                    </form>
                 </div>
             </div>
         </div>
@@ -430,18 +524,13 @@ class BNOG_Admin {
         }
 
         // Get settings from request.
-        $region       = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : 'DE';
-        $max_width    = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
-        $jpeg_quality = isset( $_POST['jpeg_quality'] ) ? absint( $_POST['jpeg_quality'] ) : 85;
+        $region = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : 'NY';
 
         // Validate region.
         $valid_regions = array_keys( bunny_net_offload_gelform()->api->get_available_regions() );
         if ( ! in_array( $region, $valid_regions, true ) ) {
-            $region = 'DE';
+            $region = 'NY';
         }
-
-        // Validate quality.
-        $jpeg_quality = max( 1, min( 100, $jpeg_quality ) );
 
         // Setup CDN.
         $result = bunny_net_offload_gelform()->api->setup_cdn( $region );
@@ -457,10 +546,11 @@ class BNOG_Admin {
         $config = array_merge(
             $result,
             array(
-                'max_width'        => $max_width,
-                'max_height'       => $max_width, // Keep square for now.
-                'jpeg_quality'     => $jpeg_quality,
+                'max_width'        => 2048,
+                'max_height'       => 2048,
+                'jpeg_quality'     => 85,
                 'png_compression'  => 6,
+                'webp_quality'     => 82,
                 'keep_local_files' => true,
             )
         );
@@ -492,16 +582,22 @@ class BNOG_Admin {
         $config = bunny_net_offload_gelform()->get_config();
 
         // Update settings with proper validation.
-        $max_width    = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
-        $jpeg_quality = isset( $_POST['jpeg_quality'] ) ? absint( $_POST['jpeg_quality'] ) : 85;
+        $max_width       = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
+        $jpeg_quality    = isset( $_POST['jpeg_quality'] ) ? absint( $_POST['jpeg_quality'] ) : 85;
+        $png_compression = isset( $_POST['png_compression'] ) ? absint( $_POST['png_compression'] ) : 6;
+        $webp_quality    = isset( $_POST['webp_quality'] ) ? absint( $_POST['webp_quality'] ) : 82;
 
         // Validate ranges.
-        $max_width    = max( 100, min( 10000, $max_width ) );
-        $jpeg_quality = max( 1, min( 100, $jpeg_quality ) );
+        $max_width       = max( 100, min( 10000, $max_width ) );
+        $jpeg_quality    = max( 1, min( 100, $jpeg_quality ) );
+        $png_compression = max( 0, min( 9, $png_compression ) );
+        $webp_quality    = max( 1, min( 100, $webp_quality ) );
 
         $config['max_width']        = $max_width;
         $config['max_height']       = $max_width;
         $config['jpeg_quality']     = $jpeg_quality;
+        $config['png_compression']  = $png_compression;
+        $config['webp_quality']     = $webp_quality;
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
 
         update_option( 'bnog_config', $config );

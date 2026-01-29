@@ -1,4 +1,4 @@
-=== bunny.net offload by Gelform ===
+=== Bunny.net Offload by Gelform ===
 Contributors: gelform
 Tags: cdn, bunny, image optimization, performance, offload
 Requires at least: 5.8
@@ -12,7 +12,7 @@ Dead-simple image optimization and CDN offloading using Bunny.net with one-click
 
 == Description ==
 
-bunny.net offload by Gelform provides effortless image optimization and CDN delivery using Bunny.net. No API keys to copy-paste, no complex configuration - just connect and go.
+Bunny.net Offload by Gelform provides effortless image optimization and CDN delivery using Bunny.net. No API keys to copy-paste, no complex configuration - just connect and go.
 
 = Features =
 
@@ -42,7 +42,7 @@ All new images are automatically optimized and uploaded to your CDN. Existing im
 
 1. Upload the plugin files to `/wp-content/plugins/bunny-net-offload-gelform/`
 2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to Settings > bunny.net offload
+3. Go to Settings > Bunny.net Offload
 4. Click "Connect to Bunny.net" and follow the authorization flow
 5. Configure your settings and click "Set Up CDN"
 
@@ -54,7 +54,7 @@ Yes, you need a Bunny.net account. They offer a free trial and very affordable p
 
 = Will this work with my existing images? =
 
-Yes! After setup, you can click "Sync Existing Media" to upload all your existing images to the CDN. This happens in the background.
+Yes! After setup, you can click "Start Sync of Existing Files" to upload all your existing images to the CDN. This happens in the background.
 
 = What happens to my images if I deactivate the plugin? =
 
@@ -88,4 +88,4 @@ The plugin uses Bunny.net's default b-cdn.net subdomain. Custom domains can be c
 == Upgrade Notice ==
 
 = 1.0.0 =
-Initial release of bunny.net offload by Gelform.
+Initial release of Bunny.net Offload by Gelform.

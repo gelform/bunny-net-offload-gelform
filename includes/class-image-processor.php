@@ -107,6 +107,7 @@ class BNOG_Image_Processor {
             'max_height'      => isset( $config['max_height'] ) ? $config['max_height'] : 2048,
             'jpeg_quality'    => isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85,
             'png_compression' => isset( $config['png_compression'] ) ? $config['png_compression'] : 6,
+            'webp_quality'    => isset( $config['webp_quality'] ) ? $config['webp_quality'] : 82,
         );
 
         $options = wp_parse_args( $options, $defaults );
@@ -149,11 +150,15 @@ class BNOG_Image_Processor {
             );
         }
 
-        // Set quality settings.
-        $editor->set_quality( $options['jpeg_quality'] );
-
-        // Get MIME type for save.
+        // Get MIME type for setting appropriate quality.
         $mime_type = $this->get_mime_type( $file_path );
+
+        // Set quality settings based on image type.
+        if ( 'image/webp' === $mime_type ) {
+            $editor->set_quality( $options['webp_quality'] );
+        } else {
+            $editor->set_quality( $options['jpeg_quality'] );
+        }
 
         // Generate output filename.
         $pathinfo    = pathinfo( $file_path );
@@ -197,6 +202,7 @@ class BNOG_Image_Processor {
             'max_height'      => isset( $config['max_height'] ) ? $config['max_height'] : 2048,
             'jpeg_quality'    => isset( $config['jpeg_quality'] ) ? $config['jpeg_quality'] : 85,
             'png_compression' => isset( $config['png_compression'] ) ? $config['png_compression'] : 6,
+            'webp_quality'    => isset( $config['webp_quality'] ) ? $config['webp_quality'] : 82,
         );
 
         $options = wp_parse_args( $options, $defaults );
@@ -225,11 +231,15 @@ class BNOG_Image_Processor {
             }
         }
 
-        // Set quality settings.
-        $editor->set_quality( $options['jpeg_quality'] );
-
         // Get MIME type.
         $mime_type = $this->get_mime_type( $file_path );
+
+        // Set quality settings based on image type.
+        if ( 'image/webp' === $mime_type ) {
+            $editor->set_quality( $options['webp_quality'] );
+        } else {
+            $editor->set_quality( $options['jpeg_quality'] );
+        }
 
         // Generate temp output filename.
         $upload_dir = wp_upload_dir();
