@@ -227,14 +227,14 @@ class BNOG_Media_Handler {
         delete_post_meta( $attachment_id, '_bnog_cdn_url' );
         delete_post_meta( $attachment_id, '_bnog_synced' );
 
-        // Delete all size-specific CDN URLs.
+        // Delete all size-specific CDN URLs (only plugin-specific meta).
         global $wpdb;
-        $wpdb->delete(
-            $wpdb->postmeta,
-            array(
-                'post_id' => $attachment_id,
-            ),
-            array( '%d' )
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key LIKE %s",
+                $attachment_id,
+                $wpdb->esc_like( '_bnog_cdn_url_' ) . '%'
+            )
         );
     }
 
