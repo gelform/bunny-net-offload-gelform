@@ -71,10 +71,15 @@ class BNOG_Bunny_Auth {
      * Store the API key (encrypted).
      *
      * @param string $api_key The API key to store.
-     * @return bool
+     * @return bool|WP_Error True on success, WP_Error on failure.
      */
     public function set_api_key( $api_key ) {
         $encrypted = $this->encrypt( $api_key );
+        
+        if ( is_wp_error( $encrypted ) ) {
+            return $encrypted;
+        }
+        
         return update_option( self::API_KEY_OPTION, $encrypted );
     }
 
@@ -98,10 +103,15 @@ class BNOG_Bunny_Auth {
         $site_url     = site_url();
         $callback_url = admin_url( 'admin.php?page=bunny-net-offload-gelform' );
 
+        // Generate state parameter for CSRF protection.
+        $state = wp_create_nonce( 'bnog_auth_' . get_current_user_id() );
+        set_transient( 'bnog_auth_state_' . $state, time(), 300 ); // 5 minutes.
+
         $params = array(
             'source'      => 'wp-plugin',
             'domain'      => $site_url,
             'callbackUrl' => $callback_url,
+            'state'       => $state,
         );
 
         return add_query_arg( $params, self::AUTH_ENDPOINT );
@@ -113,6 +123,11 @@ class BNOG_Bunny_Auth {
     public function handle_auth_callback() {
         // Check if this is our page.
         if ( ! isset( $_GET['page'] ) || 'bunny-net-offload-gelform' !== $_GET['page'] ) {
+            return;
+        }
+
+        // Verify user capabilities early.
+        if ( ! current_user_can( 'manage_options' ) ) {
             return;
         }
 
@@ -131,6 +146,19 @@ class BNOG_Bunny_Auth {
             }
         }
 
+        // Verify state parameter for CSRF protection.
+        $state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+        if ( ! empty( $state ) ) {
+            $stored_state = get_transient( 'bnog_auth_state_' . $state );
+            if ( ! $stored_state ) {
+                set_transient( 'bnog_auth_error', __( 'Invalid or expired authorization request. Please try again.', 'bunny-net-offload-gelform' ), 60 );
+                wp_safe_redirect( admin_url( 'admin.php?page=bunny-net-offload-gelform&auth=failed' ) );
+                exit;
+            }
+            // Delete the used state.
+            delete_transient( 'bnog_auth_state_' . $state );
+        }
+
         // Check for API key in callback - try various possible parameter names.
         $api_key = '';
 
@@ -147,11 +175,6 @@ class BNOG_Bunny_Auth {
         // No API key in request, not a callback.
         if ( empty( $api_key ) ) {
             return;
-        }
-
-        // Verify user capabilities.
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( esc_html__( 'You do not have permission to perform this action.', 'bunny-net-offload-gelform' ) );
         }
 
         // Validate the API key by making a test request.
@@ -231,12 +254,14 @@ class BNOG_Bunny_Auth {
      * Encrypt a value using WordPress salts.
      *
      * @param string $value The value to encrypt.
-     * @return string
+     * @return string|WP_Error Encrypted value or WP_Error on failure.
      */
     private function encrypt( $value ) {
         if ( ! extension_loaded( 'openssl' ) ) {
-            // Fallback to base64 if OpenSSL not available (not secure, but functional).
-            return base64_encode( $value );
+            return new WP_Error(
+                'no_openssl',
+                __( 'OpenSSL extension is required for secure API key storage. Please contact your hosting provider.', 'bunny-net-offload-gelform' )
+            );
         }
 
         $key    = $this->get_encryption_key();
@@ -244,7 +269,10 @@ class BNOG_Bunny_Auth {
         $cipher = openssl_encrypt( $value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
 
         if ( false === $cipher ) {
-            return base64_encode( $value );
+            return new WP_Error(
+                'encryption_failed',
+                __( 'Failed to encrypt API key. Please try again.', 'bunny-net-offload-gelform' )
+            );
         }
 
         return base64_encode( $iv . $cipher );
@@ -258,13 +286,13 @@ class BNOG_Bunny_Auth {
      */
     private function decrypt( $encrypted ) {
         if ( ! extension_loaded( 'openssl' ) ) {
-            return base64_decode( $encrypted );
+            return false;
         }
 
         $data = base64_decode( $encrypted );
 
         if ( false === $data || strlen( $data ) < 17 ) {
-            return base64_decode( $encrypted );
+            return false;
         }
 
         $key    = $this->get_encryption_key();
@@ -274,7 +302,7 @@ class BNOG_Bunny_Auth {
         $decrypted = openssl_decrypt( $cipher, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
 
         if ( false === $decrypted ) {
-            return base64_decode( $encrypted );
+            return false;
         }
 
         return $decrypted;

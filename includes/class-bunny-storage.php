@@ -231,17 +231,19 @@ class BNOG_Bunny_Storage {
         // Check if URL is from uploads directory.
         if ( 0 === strpos( $local_url, $base_url ) ) {
             $relative = str_replace( $base_url, '', $local_url );
-            return 'wp-content/uploads' . $relative;
+            $path     = 'wp-content/uploads' . $relative;
+            return $this->normalize_remote_path( $path );
         }
 
         // Try to extract path from full URL.
         $site_url = site_url();
         if ( 0 === strpos( $local_url, $site_url ) ) {
-            return ltrim( str_replace( $site_url, '', $local_url ), '/' );
+            $path = ltrim( str_replace( $site_url, '', $local_url ), '/' );
+            return $this->normalize_remote_path( $path );
         }
 
         // Return as-is, just clean it up.
-        return ltrim( $local_url, '/' );
+        return $this->normalize_remote_path( ltrim( $local_url, '/' ) );
     }
 
     /**
@@ -251,26 +253,33 @@ class BNOG_Bunny_Storage {
      * @return string Remote storage path.
      */
     public function path_to_remote_path( $local_path ) {
+        // Normalize the path first.
+        $local_path = wp_normalize_path( $local_path );
+        
         // Get uploads directory.
         $upload_dir = wp_upload_dir();
-        $base_dir   = $upload_dir['basedir'];
+        $base_dir   = wp_normalize_path( $upload_dir['basedir'] );
 
         // Check if file is in uploads directory.
         if ( 0 === strpos( $local_path, $base_dir ) ) {
             $relative = str_replace( $base_dir, '', $local_path );
-            return 'wp-content/uploads' . $relative;
+            $path     = 'wp-content/uploads' . $relative;
+            return $this->normalize_remote_path( $path );
         }
 
         // Check if file is in wp-content.
-        $content_dir = WP_CONTENT_DIR;
+        $content_dir = wp_normalize_path( WP_CONTENT_DIR );
         if ( 0 === strpos( $local_path, $content_dir ) ) {
             $relative = str_replace( $content_dir, '', $local_path );
-            return 'wp-content' . $relative;
+            $path     = 'wp-content' . $relative;
+            return $this->normalize_remote_path( $path );
         }
 
         // Try ABSPATH.
-        if ( 0 === strpos( $local_path, ABSPATH ) ) {
-            return ltrim( str_replace( ABSPATH, '', $local_path ), '/' );
+        $abspath = wp_normalize_path( ABSPATH );
+        if ( 0 === strpos( $local_path, $abspath ) ) {
+            $path = ltrim( str_replace( $abspath, '', $local_path ), '/' );
+            return $this->normalize_remote_path( $path );
         }
 
         // Return filename only as fallback.
@@ -358,5 +367,25 @@ class BNOG_Bunny_Storage {
         }
 
         return $results;
+    }
+
+    /**
+     * Normalize a remote path to prevent path traversal.
+     *
+     * @param string $path Remote path.
+     * @return string Normalized path.
+     */
+    private function normalize_remote_path( $path ) {
+        // Remove any ../ or ./ sequences.
+        $path = preg_replace( '#/\.+/#', '/', $path );
+        $path = preg_replace( '#/\.+$#', '', $path );
+        
+        // Remove multiple slashes.
+        $path = preg_replace( '#/+#', '/', $path );
+        
+        // Ensure no leading slash.
+        $path = ltrim( $path, '/' );
+        
+        return $path;
     }
 }

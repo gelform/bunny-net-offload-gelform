@@ -491,10 +491,17 @@ class BNOG_Admin {
 
         $config = bunny_net_offload_gelform()->get_config();
 
-        // Update settings.
-        $config['max_width']        = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
-        $config['max_height']       = $config['max_width'];
-        $config['jpeg_quality']     = isset( $_POST['jpeg_quality'] ) ? max( 1, min( 100, absint( $_POST['jpeg_quality'] ) ) ) : 85;
+        // Update settings with proper validation.
+        $max_width    = isset( $_POST['max_width'] ) ? absint( $_POST['max_width'] ) : 2048;
+        $jpeg_quality = isset( $_POST['jpeg_quality'] ) ? absint( $_POST['jpeg_quality'] ) : 85;
+
+        // Validate ranges.
+        $max_width    = max( 100, min( 10000, $max_width ) );
+        $jpeg_quality = max( 1, min( 100, $jpeg_quality ) );
+
+        $config['max_width']        = $max_width;
+        $config['max_height']       = $max_width;
+        $config['jpeg_quality']     = $jpeg_quality;
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
 
         update_option( 'bnog_config', $config );

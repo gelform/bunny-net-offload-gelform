@@ -48,18 +48,21 @@ wp_clear_scheduled_hook( 'bnog_process_queue' );
 $upload_dir = wp_upload_dir();
 $temp_dir   = $upload_dir['basedir'] . '/bnog-temp';
 
-if ( is_dir( $temp_dir ) ) {
+// Validate that temp_dir is actually within uploads directory.
+if ( 0 === strpos( wp_normalize_path( $temp_dir ), wp_normalize_path( $upload_dir['basedir'] ) ) && is_dir( $temp_dir ) ) {
     // Remove all files in temp directory.
     $files = glob( $temp_dir . '/*' );
-    foreach ( $files as $file ) {
-        if ( is_file( $file ) ) {
-            wp_delete_file( $file );
+    if ( is_array( $files ) ) {
+        foreach ( $files as $file ) {
+            if ( is_file( $file ) && 0 === strpos( wp_normalize_path( $file ), wp_normalize_path( $temp_dir ) ) ) {
+                wp_delete_file( $file );
+            }
         }
     }
 
     // Remove .htaccess.
     $htaccess = $temp_dir . '/.htaccess';
-    if ( file_exists( $htaccess ) ) {
+    if ( file_exists( $htaccess ) && 0 === strpos( wp_normalize_path( $htaccess ), wp_normalize_path( $temp_dir ) ) ) {
         wp_delete_file( $htaccess );
     }
 

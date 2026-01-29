@@ -84,6 +84,21 @@ class BNOG_Image_Processor {
             return new WP_Error( 'invalid_image', __( 'File is not a supported image type.', 'bunny-net-offload-gelform' ) );
         }
 
+        // Check file size (50MB limit to prevent memory exhaustion).
+        $file_size = filesize( $file_path );
+        $max_size  = 50 * MB_IN_BYTES;
+        
+        if ( false === $file_size || $file_size > $max_size ) {
+            return new WP_Error(
+                'file_too_large',
+                sprintf(
+                    /* translators: %s: Maximum file size in MB */
+                    __( 'Image file is too large to process (maximum %s MB).', 'bunny-net-offload-gelform' ),
+                    number_format( $max_size / MB_IN_BYTES )
+                )
+            );
+        }
+
         $config = bunny_net_offload_gelform()->get_config();
 
         // Merge options with config defaults.
