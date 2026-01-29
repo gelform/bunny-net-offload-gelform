@@ -28,22 +28,6 @@ class BNOG_Bunny_Storage {
     const MAX_RETRIES = 3;
 
     /**
-     * Allowed MIME types for upload.
-     *
-     * @var array
-     */
-    const ALLOWED_MIME_TYPES = array(
-        'image/jpeg',
-        'image/jpg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'image/svg+xml',
-        'image/bmp',
-        'image/tiff',
-    );
-
-    /**
      * Upload a file to Bunny Storage.
      *
      * @param string $local_path  Full path to local file.
@@ -62,9 +46,9 @@ class BNOG_Bunny_Storage {
             return new WP_Error( 'file_not_found', __( 'Local file not found or not readable.', 'bunny-net-offload-gelform' ) );
         }
 
-        // Validate file type before upload.
+        // Validate file type before upload using WordPress's allowed MIME types.
         $file_type = wp_check_filetype( $local_path );
-        if ( empty( $file_type['type'] ) || ! in_array( $file_type['type'], self::ALLOWED_MIME_TYPES, true ) ) {
+        if ( empty( $file_type['type'] ) || ! $this->is_allowed_image_type( $file_type['type'] ) ) {
             return new WP_Error( 'invalid_file_type', __( 'File type is not allowed for CDN upload.', 'bunny-net-offload-gelform' ) );
         }
 
@@ -419,5 +403,47 @@ class BNOG_Bunny_Storage {
         $path = ltrim( $path, '/' );
         
         return $path;
+    }
+
+    /**
+     * Check if a MIME type is an allowed image type.
+     *
+     * Uses WordPress's allowed MIME types system, which can be customized
+     * via the 'upload_mimes' filter. Only allows image/* types and excludes
+     * SVG for security reasons (can contain JavaScript).
+     *
+     * @param string $mime_type MIME type to check.
+     * @return bool True if allowed, false otherwise.
+     */
+    private function is_allowed_image_type( $mime_type ) {
+        // Get WordPress allowed MIME types (respects upload_mimes filter).
+        $allowed_mimes = get_allowed_mime_types();
+
+        // Check if the MIME type is in WordPress's allowed list.
+        if ( ! in_array( $mime_type, $allowed_mimes, true ) ) {
+            return false;
+        }
+
+        // Only allow image types.
+        if ( 0 !== strpos( $mime_type, 'image/' ) ) {
+            return false;
+        }
+
+        // Exclude SVG for security (can contain JavaScript/XSS vectors).
+        // Site admins who need SVG can use the 'bnog_allowed_image_types' filter.
+        $excluded_types = array( 'image/svg+xml' );
+
+        /**
+         * Filter the excluded image MIME types.
+         *
+         * @param array $excluded_types Array of MIME types to exclude.
+         */
+        $excluded_types = apply_filters( 'bnog_excluded_image_types', $excluded_types );
+
+        if ( in_array( $mime_type, $excluded_types, true ) ) {
+            return false;
+        }
+
+        return true;
     }
 }
