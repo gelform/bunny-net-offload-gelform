@@ -254,9 +254,14 @@ class BNOG_Admin {
                     <span class="bnog-status-icon bnog-status-connected"></span>
                     <?php esc_html_e( 'Connected to Bunny.net', 'bunny-net-offload-gelform' ); ?>
                 </h2>
-                <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
-                    <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
-                </button>
+                <div class="bnog-header-actions">
+                    <a href="https://dash.bunny.net/" target="_blank" rel="noopener noreferrer" class="button button-link">
+                        <?php esc_html_e( 'Bunny.net Dashboard', 'bunny-net-offload-gelform' ); ?>
+                    </a>
+                    <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
+                        <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
+                    </button>
+                </div>
             </div>
             <div class="bnog-card-body">
                 <p class="bnog-setup-description">
@@ -324,9 +329,14 @@ class BNOG_Admin {
                     <span class="bnog-status-icon bnog-status-active"></span>
                     <?php esc_html_e( 'Connected & Active', 'bunny-net-offload-gelform' ); ?>
                 </h2>
-                <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
-                    <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
-                </button>
+                <div class="bnog-header-actions">
+                    <a href="https://dash.bunny.net/" target="_blank" rel="noopener noreferrer" class="button button-link">
+                        <?php esc_html_e( 'Bunny.net Dashboard', 'bunny-net-offload-gelform' ); ?>
+                    </a>
+                    <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
+                        <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
+                    </button>
+                </div>
             </div>
 
             <!-- Tab Navigation -->

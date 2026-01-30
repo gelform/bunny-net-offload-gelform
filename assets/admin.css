@@ -166,6 +166,17 @@
     text-decoration: underline;
 }
 
+/* Header Actions */
+.bnog-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.bnog-header-actions .button-link {
+    text-decoration: none;
+}
+
 /* Disconnect Button */
 .bnog-disconnect-btn {
     color: #a00 !important;
