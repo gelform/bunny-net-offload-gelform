@@ -277,6 +277,12 @@ class BNOG_Media_Handler {
         $queue = get_option( self::QUEUE_OPTION, array() );
 
         if ( empty( $queue ) ) {
+            // Clear running status when queue is empty.
+            $status = get_option( 'bnog_sync_status', array() );
+            if ( ! empty( $status['running'] ) ) {
+                $status['running'] = false;
+                update_option( 'bnog_sync_status', $status );
+            }
             return;
         }
 
@@ -288,8 +294,45 @@ class BNOG_Media_Handler {
         $batch = array_slice( $queue, 0, 10 );
 
         foreach ( $batch as $attachment_id ) {
-            $this->sync_attachment( $attachment_id, $resize_before_sync );
-            $this->remove_from_queue( $attachment_id );
+            $result = $this->sync_attachment( $attachment_id, $resize_before_sync );
+
+            // Only remove from queue if sync succeeded.
+            if ( ! is_wp_error( $result ) ) {
+                $this->remove_from_queue( $attachment_id );
+            } else {
+                // Log the error and track it in status.
+                bunny_net_offload_gelform()->log(
+                    sprintf( 'Failed to sync attachment %d: %s', $attachment_id, $result->get_error_message() ),
+                    'error'
+                );
+
+                // Move failed item to end of queue to retry later.
+                $this->remove_from_queue( $attachment_id );
+                $current_queue = get_option( self::QUEUE_OPTION, array() );
+                $current_queue[] = $attachment_id;
+                update_option( self::QUEUE_OPTION, array_unique( $current_queue ) );
+
+                // Track error count.
+                $status = get_option( 'bnog_sync_status', array() );
+                $status['errors'] = isset( $status['errors'] ) ? $status['errors'] + 1 : 1;
+
+                // If we've had too many consecutive errors, pause sync.
+                if ( $status['errors'] >= 50 ) {
+                    $status['running'] = false;
+                    $status['paused_reason'] = __( 'Sync paused due to too many errors. Check your file types and CDN configuration.', 'bunny-net-offload-gelform' );
+                    update_option( 'bnog_sync_status', $status );
+                    return;
+                }
+                update_option( 'bnog_sync_status', $status );
+            }
+        }
+
+        // Check if queue is now empty.
+        $remaining_queue = get_option( self::QUEUE_OPTION, array() );
+        if ( empty( $remaining_queue ) ) {
+            $status = get_option( 'bnog_sync_status', array() );
+            $status['running'] = false;
+            update_option( 'bnog_sync_status', $status );
         }
     }
 
