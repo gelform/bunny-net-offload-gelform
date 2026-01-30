@@ -197,8 +197,9 @@
 
             var $form = $(this);
             var $btn = $('#bnog-save-btn');
-            var $spinner = $form.find('.spinner');
-            var $message = $form.find('.bnog-status-message');
+            var $submitSection = $btn.closest('.submit');
+            var $spinner = $submitSection.find('.spinner');
+            var $message = $submitSection.find('.bnog-status-message');
 
             $form.addClass('bnog-loading');
             $btn.prop('disabled', true);

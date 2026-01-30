@@ -887,6 +887,13 @@ class BNOG_Admin {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
         }
 
+        // Check if delete operation is already running.
+        $delete_status = get_option( 'bnog_delete_local_status', array() );
+        $delete_queue  = get_option( 'bnog_delete_local_queue', array() );
+        if ( ! empty( $delete_status['running'] ) && ! empty( $delete_queue ) ) {
+            wp_send_json_error( array( 'message' => __( 'A delete operation is already in progress. Please wait for it to complete.', 'bunny-net-offload-gelform' ) ) );
+        }
+
         // Get all synced attachments that still have local files.
         global $wpdb;
 
@@ -927,8 +934,10 @@ class BNOG_Admin {
         // Add all to delete queue.
         update_option( 'bnog_delete_local_queue', $attachments );
 
-        // Trigger immediate processing via cron.
-        wp_schedule_single_event( time(), 'bnog_process_delete_local_queue' );
+        // Trigger immediate processing via cron (only if not already scheduled).
+        if ( ! wp_next_scheduled( 'bnog_process_delete_local_queue' ) ) {
+            wp_schedule_single_event( time(), 'bnog_process_delete_local_queue' );
+        }
 
         wp_send_json_success(
             array(
@@ -955,6 +964,13 @@ class BNOG_Admin {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
         }
 
+        // Check if sync operation is already running.
+        $sync_status = get_option( 'bnog_sync_status', array() );
+        $sync_queue  = get_option( 'bnog_upload_queue', array() );
+        if ( ! empty( $sync_status['running'] ) && ! empty( $sync_queue ) ) {
+            wp_send_json_error( array( 'message' => __( 'A sync operation is already in progress. Please wait for it to complete.', 'bunny-net-offload-gelform' ) ) );
+        }
+
         // Get all image attachments (both synced and unsynced) that have local files.
         global $wpdb;
 
@@ -977,12 +993,9 @@ class BNOG_Admin {
             );
         }
 
-        // Clear the synced flag for all attachments so they get reprocessed.
-        $wpdb->query(
-            "DELETE FROM {$wpdb->postmeta}
-            WHERE meta_key = '_bnog_synced'
-            AND post_id IN (" . implode( ',', $attachments ) . ')'
-        );
+        // Clear the synced flag for attachments in batches to avoid query size limits.
+        // The sync processor will clear the flag as it processes each item.
+        // Note: We don't delete _bnog_synced here anymore - the queue processor handles re-syncing.
 
         // Store sync status with resize option enabled.
         update_option(
@@ -1000,8 +1013,10 @@ class BNOG_Admin {
         // Add all to sync queue.
         update_option( 'bnog_upload_queue', $attachments );
 
-        // Trigger immediate processing via cron.
-        wp_schedule_single_event( time(), 'bnog_process_queue' );
+        // Trigger immediate processing via cron (only if not already scheduled).
+        if ( ! wp_next_scheduled( 'bnog_process_queue' ) ) {
+            wp_schedule_single_event( time(), 'bnog_process_queue' );
+        }
 
         wp_send_json_success(
             array(
