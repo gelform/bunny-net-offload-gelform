@@ -152,15 +152,15 @@ class BNOG_Bunny_API {
      * @return string
      */
     public function generate_zone_name() {
-        // Generate a random alphanumeric string (12 chars for uniqueness).
+        // Generate a random alphanumeric string (16 chars for uniqueness).
         $chars  = 'abcdefghijklmnopqrstuvwxyz0123456789';
         $random = '';
 
-        for ( $i = 0; $i < 12; $i++ ) {
+        for ( $i = 0; $i < 16; $i++ ) {
             $random .= $chars[ wp_rand( 0, strlen( $chars ) - 1 ) ];
         }
 
-        return 'bnog-' . $random;
+        return 'wp-offload-' . $random;
     }
 
     /**

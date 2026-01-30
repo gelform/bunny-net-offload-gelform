@@ -256,7 +256,8 @@ class BNOG_Admin {
                 </h2>
                 <div class="bnog-header-actions">
                     <a href="https://dash.bunny.net/" target="_blank" rel="noopener noreferrer" class="button button-link">
-                        <?php esc_html_e( 'Bunny.net Dashboard', 'bunny-net-offload-gelform' ); ?>
+                        <?php esc_html_e( 'Bunny.net', 'bunny-net-offload-gelform' ); ?>
+                        <span class="dashicons dashicons-external" style="font-size: 14px; line-height: 1.5; width: 14px; height: 14px;"></span>
                     </a>
                     <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
                         <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
@@ -330,8 +331,16 @@ class BNOG_Admin {
                     <?php esc_html_e( 'Connected & Active', 'bunny-net-offload-gelform' ); ?>
                 </h2>
                 <div class="bnog-header-actions">
-                    <a href="https://dash.bunny.net/" target="_blank" rel="noopener noreferrer" class="button button-link">
-                        <?php esc_html_e( 'Bunny.net Dashboard', 'bunny-net-offload-gelform' ); ?>
+                    <?php
+                    // Build deep link to storage zone in Bunny.net dashboard.
+                    $storage_zone_id   = ! empty( $config['storage_zone_id'] ) ? $config['storage_zone_id'] : '';
+                    $bunny_dashboard_url = $storage_zone_id
+                        ? 'https://dash.bunny.net/storage/' . $storage_zone_id . '/file-manager'
+                        : 'https://dash.bunny.net/';
+                    ?>
+                    <a href="<?php echo esc_url( $bunny_dashboard_url ); ?>" target="_blank" rel="noopener noreferrer" class="button button-link">
+                        <?php esc_html_e( 'Bunny.net', 'bunny-net-offload-gelform' ); ?>
+                        <span class="dashicons dashicons-external" style="font-size: 14px; line-height: 1.5; width: 14px; height: 14px;"></span>
                     </a>
                     <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
                         <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
@@ -439,21 +448,6 @@ class BNOG_Admin {
                                 </p>
                             <?php endif; ?>
                         <?php endif; ?>
-                    </div>
-
-                    <hr class="bnog-divider">
-
-                    <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
-
-                    <div class="bnog-cache-section">
-                        <button type="button" class="button" id="bnog-purge-btn">
-                            <?php esc_html_e( 'Purge CDN Cache', 'bunny-net-offload-gelform' ); ?>
-                        </button>
-                        <span class="spinner"></span>
-                        <span class="bnog-status-message"></span>
-                        <p class="description">
-                            <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
-                        </p>
                     </div>
                 </div>
             </div>
@@ -600,6 +594,21 @@ class BNOG_Admin {
                                 </td>
                             </tr>
                         </table>
+
+                        <hr class="bnog-divider">
+
+                        <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <div class="bnog-cache-section">
+                            <button type="button" class="button" id="bnog-purge-btn">
+                                <?php esc_html_e( 'Purge CDN Cache', 'bunny-net-offload-gelform' ); ?>
+                            </button>
+                            <span class="spinner"></span>
+                            <span class="bnog-status-message"></span>
+                            <p class="description">
+                                <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
+                            </p>
+                        </div>
 
                         <p class="submit">
                             <button type="submit" class="button button-primary" id="bnog-save-btn">
