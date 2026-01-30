@@ -344,6 +344,10 @@ class BNOG_Admin {
         $sync_status  = get_option( 'bnog_sync_status', array() );
         $sync_queue   = get_option( 'bnog_upload_queue', array() );
         $sync_running = ! empty( $sync_status['running'] ) && ! empty( $sync_queue );
+
+        // Check if this is a bulk image processing (resize/compress) operation.
+        $is_bulk_processing = $sync_running && ! empty( $sync_status['resize_before_sync'] );
+        $total_to_process   = isset( $sync_status['total'] ) ? intval( $sync_status['total'] ) : 0;
         ?>
         <div class="bnog-card bnog-card-configured">
             <div class="bnog-card-header">
@@ -414,19 +418,30 @@ class BNOG_Admin {
                             <!-- Sync in progress -->
                             <div class="bnog-sync-in-progress">
                                 <div class="bnog-sync-stats">
-                                    <span class="bnog-stat">
-                                        <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
-                                        <?php echo $sync_all_files ? esc_html__( 'files on CDN', 'bunny-net-offload-gelform' ) : esc_html__( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
-                                    </span>
-                                    <span class="bnog-stat bnog-stat-pending">
-                                        <strong><?php echo esc_html( number_format( count( $sync_queue ) ) ); ?></strong>
-                                        <?php esc_html_e( 'remaining', 'bunny-net-offload-gelform' ); ?>
-                                    </span>
+                                    <?php if ( $is_bulk_processing ) : ?>
+                                        <span class="bnog-stat">
+                                            <strong><?php echo esc_html( number_format( $total_to_process ) ); ?></strong>
+                                            <?php esc_html_e( 'images on server', 'bunny-net-offload-gelform' ); ?>
+                                        </span>
+                                        <span class="bnog-stat bnog-stat-pending">
+                                            <strong><?php echo esc_html( number_format( count( $sync_queue ) ) ); ?></strong>
+                                            <?php esc_html_e( 'remaining to process', 'bunny-net-offload-gelform' ); ?>
+                                        </span>
+                                    <?php else : ?>
+                                        <span class="bnog-stat">
+                                            <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
+                                            <?php echo $sync_all_files ? esc_html__( 'files on CDN', 'bunny-net-offload-gelform' ) : esc_html__( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
+                                        </span>
+                                        <span class="bnog-stat bnog-stat-pending">
+                                            <strong><?php echo esc_html( number_format( count( $sync_queue ) ) ); ?></strong>
+                                            <?php esc_html_e( 'remaining', 'bunny-net-offload-gelform' ); ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="bnog-sync-running-notice">
                                     <span class="spinner is-active"></span>
                                     <span class="bnog-sync-running-text">
-                                        <?php esc_html_e( 'Syncing in progress...', 'bunny-net-offload-gelform' ); ?>
+                                        <?php echo $is_bulk_processing ? esc_html__( 'Bulk image processing in progress...', 'bunny-net-offload-gelform' ) : esc_html__( 'Syncing in progress...', 'bunny-net-offload-gelform' ); ?>
                                     </span>
                                     <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small bnog-refresh-btn">
                                         <span class="dashicons dashicons-update"></span>
@@ -434,7 +449,7 @@ class BNOG_Admin {
                                     </a>
                                 </div>
                                 <p class="bnog-sync-notice">
-                                    <?php esc_html_e( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ); ?>
+                                    <?php echo $is_bulk_processing ? esc_html__( 'Bulk image processing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ) : esc_html__( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ); ?>
                                 </p>
                             </div>
                         <?php else : ?>
@@ -672,11 +687,30 @@ class BNOG_Admin {
                             <h3><?php esc_html_e( 'Bulk Image Processing', 'bunny-net-offload-gelform' ); ?></h3>
 
                             <div class="bnog-resize-compress-section">
-                                <button type="button" class="button" id="bnog-resize-compress-btn">
-                                    <?php esc_html_e( 'Resize and Compress Files', 'bunny-net-offload-gelform' ); ?>
-                                </button>
-                                <span class="spinner"></span>
-                                <span class="bnog-status-message"></span>
+                                <?php if ( $is_bulk_processing ) : ?>
+                                    <div class="bnog-bulk-processing-in-progress">
+                                        <span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>
+                                        <span class="bnog-bulk-processing-text">
+                                            <?php
+                                            printf(
+                                                /* translators: %d: number of files remaining */
+                                                esc_html__( 'Processing images... %d remaining', 'bunny-net-offload-gelform' ),
+                                                count( $sync_queue )
+                                            );
+                                            ?>
+                                        </span>
+                                        <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small" style="margin-left: 10px;">
+                                            <span class="dashicons dashicons-update" style="vertical-align: middle;"></span>
+                                            <?php esc_html_e( 'Refresh', 'bunny-net-offload-gelform' ); ?>
+                                        </a>
+                                    </div>
+                                <?php else : ?>
+                                    <button type="button" class="button" id="bnog-resize-compress-btn">
+                                        <?php esc_html_e( 'Resize and Compress Files', 'bunny-net-offload-gelform' ); ?>
+                                    </button>
+                                    <span class="spinner"></span>
+                                    <span class="bnog-status-message"></span>
+                                <?php endif; ?>
                                 <p class="description">
                                     <?php esc_html_e( 'Resize and compress existing image files on the server using the above settings. Files will also be re-synced to CDN.', 'bunny-net-offload-gelform' ); ?>
                                 </p>
