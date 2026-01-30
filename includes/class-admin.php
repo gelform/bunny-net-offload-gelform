@@ -700,10 +700,24 @@ class BNOG_Admin {
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
         $config['sync_all_files']   = ! empty( $_POST['sync_all_files'] );
 
-        // Sanitize custom CDN domain (remove protocol, trailing slashes).
+        // Sanitize and validate custom CDN domain.
         $custom_cdn_domain = isset( $_POST['custom_cdn_domain'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_cdn_domain'] ) ) : '';
+
+        // Remove protocol if present.
         $custom_cdn_domain = preg_replace( '#^https?://#', '', $custom_cdn_domain );
-        $custom_cdn_domain = rtrim( $custom_cdn_domain, '/' );
+
+        // Remove any path, query string, or fragment.
+        $custom_cdn_domain = preg_replace( '#[/?#].*$#', '', $custom_cdn_domain );
+
+        // Remove trailing slashes and whitespace.
+        $custom_cdn_domain = trim( rtrim( $custom_cdn_domain, '/' ) );
+
+        // Validate that it looks like a valid hostname (alphanumeric, dots, hyphens only).
+        // Clear the value if it doesn't match a valid hostname pattern.
+        if ( ! empty( $custom_cdn_domain ) && ! preg_match( '/^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/', $custom_cdn_domain ) ) {
+            $custom_cdn_domain = '';
+        }
+
         $config['custom_cdn_domain'] = $custom_cdn_domain;
 
         update_option( 'bnog_config', $config );

@@ -80,7 +80,8 @@ class BNOG_URL_Rewriter {
         if ( ! empty( $cdn_url ) ) {
             // Verify CDN is available (with caching).
             if ( $this->is_cdn_available() ) {
-                return $cdn_url;
+                // Rewrite with custom domain if configured.
+                return $this->rewrite_cdn_url_with_effective_base( $cdn_url );
             }
         }
 
@@ -111,6 +112,9 @@ class BNOG_URL_Rewriter {
         }
 
         if ( ! empty( $cdn_url ) && $this->is_cdn_available() ) {
+            // Rewrite with custom domain if configured.
+            $cdn_url = $this->rewrite_cdn_url_with_effective_base( $cdn_url );
+
             // If we have a size-specific URL, use it.
             if ( strpos( $cdn_url, '-' . $image[1] . 'x' . $image[2] . '.' ) !== false ) {
                 $image[0] = $cdn_url;
@@ -159,7 +163,8 @@ class BNOG_URL_Rewriter {
             $size_cdn_url  = $size_key ? get_post_meta( $attachment_id, '_bnog_cdn_url_' . $size_key, true ) : '';
 
             if ( ! empty( $size_cdn_url ) ) {
-                $sources[ $width ]['url'] = $size_cdn_url;
+                // Rewrite with custom domain if configured.
+                $sources[ $width ]['url'] = $this->rewrite_cdn_url_with_effective_base( $size_cdn_url );
             } else {
                 // Convert local URL to CDN URL.
                 $sources[ $width ]['url'] = $this->local_url_to_cdn( $source['url'] );
@@ -295,14 +300,21 @@ class BNOG_URL_Rewriter {
         }
 
         // Check if this is a CDN URL (check both custom and default).
-        $relative = null;
-        if ( strpos( $cdn_url, $cdn_base_url ) !== false ) {
-            $relative = str_replace( trailingslashit( $cdn_base_url ), '', $cdn_url );
+        // Use strict prefix check (0 === strpos) to avoid matching URLs where
+        // the base appears later in the string (e.g., query/fragment).
+        $relative          = null;
+        $cdn_base_prefixed = trailingslashit( $cdn_base_url );
+
+        if ( 0 === strpos( $cdn_url, $cdn_base_prefixed ) ) {
+            $relative = substr( $cdn_url, strlen( $cdn_base_prefixed ) );
         } else {
             // Also check against the original CDN URL if custom domain is set.
             $config = bunny_net_offload_gelform()->get_config();
-            if ( ! empty( $config['cdn_url'] ) && strpos( $cdn_url, $config['cdn_url'] ) !== false ) {
-                $relative = str_replace( trailingslashit( $config['cdn_url'] ), '', $cdn_url );
+            if ( ! empty( $config['cdn_url'] ) ) {
+                $original_cdn_prefixed = trailingslashit( $config['cdn_url'] );
+                if ( 0 === strpos( $cdn_url, $original_cdn_prefixed ) ) {
+                    $relative = substr( $cdn_url, strlen( $original_cdn_prefixed ) );
+                }
             }
         }
 
@@ -486,5 +498,43 @@ class BNOG_URL_Rewriter {
         // Fall back to default CDN URL.
         $this->effective_cdn_url = ! empty( $config['cdn_url'] ) ? $config['cdn_url'] : '';
         return $this->effective_cdn_url;
+    }
+
+    /**
+     * Rewrite a stored CDN URL to use the effective CDN base.
+     *
+     * When a custom domain is configured, stored meta URLs (which use the
+     * default Bunny hostname) are rewritten to use the custom domain.
+     *
+     * @param string $stored_cdn_url The stored CDN URL (may use default Bunny hostname).
+     * @return string The URL rewritten with the effective CDN base.
+     */
+    private function rewrite_cdn_url_with_effective_base( $stored_cdn_url ) {
+        $config = bunny_net_offload_gelform()->get_config();
+
+        // If no custom domain is set, return the URL as-is.
+        if ( empty( $config['custom_cdn_domain'] ) ) {
+            return $stored_cdn_url;
+        }
+
+        // Get the original CDN URL (default Bunny hostname).
+        $original_cdn_url = ! empty( $config['cdn_url'] ) ? $config['cdn_url'] : '';
+
+        if ( empty( $original_cdn_url ) ) {
+            return $stored_cdn_url;
+        }
+
+        // Check if the stored URL uses the original CDN base.
+        $original_cdn_prefixed = trailingslashit( $original_cdn_url );
+
+        if ( 0 === strpos( $stored_cdn_url, $original_cdn_prefixed ) ) {
+            // Extract the relative path and rewrite with custom domain.
+            $relative_path     = substr( $stored_cdn_url, strlen( $original_cdn_prefixed ) );
+            $effective_cdn_url = $this->get_effective_cdn_url();
+            return trailingslashit( $effective_cdn_url ) . $relative_path;
+        }
+
+        // URL doesn't match original CDN base, return as-is.
+        return $stored_cdn_url;
     }
 }

@@ -208,7 +208,9 @@
                     jpeg_quality: $('#bnog-jpeg-quality').val(),
                     png_compression: $('#bnog-png-compression').val(),
                     webp_quality: $('#bnog-webp-quality').val(),
-                    keep_local_files: $('#bnog-keep-local').is(':checked') ? 1 : 0
+                    keep_local_files: $('#bnog-keep-local').is(':checked') ? 1 : 0,
+                    sync_all_files: $('#bnog-sync-all-files').is(':checked') ? 1 : 0,
+                    custom_cdn_domain: $('#bnog-custom-cdn-domain').val()
                 },
                 success: function(response) {
                     $form.removeClass('bnog-loading');
