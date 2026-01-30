@@ -59,11 +59,34 @@ class BNOG_URL_Rewriter {
         // Filter srcset for responsive images.
         add_filter( 'wp_calculate_image_srcset', array( $this, 'filter_srcset' ), 99, 5 );
 
-        // Filter content URLs.
-        add_filter( 'the_content', array( $this, 'filter_content' ), 99 );
+        // Filter content URLs - use high priority like WP Offload Media.
+        add_filter( 'the_content', array( $this, 'filter_content' ), 100 );
+        add_filter( 'the_excerpt', array( $this, 'filter_content' ), 100 );
 
         // Filter attachment image attributes.
         add_filter( 'wp_get_attachment_image_attributes', array( $this, 'filter_image_attributes' ), 99, 3 );
+
+        // Filter wp_prepare_attachment_for_js - used by Beaver Builder's FLBuilderPhoto::get_attachment_data().
+        add_filter( 'wp_prepare_attachment_for_js', array( $this, 'filter_attachment_for_js' ), 99, 3 );
+
+        // Filter attachment metadata for responsive images.
+        add_filter( 'wp_get_attachment_metadata', array( $this, 'filter_attachment_metadata' ), 99, 2 );
+
+        // Beaver Builder specific hooks.
+        add_filter( 'fl_builder_photo_data', array( $this, 'filter_bb_photo_data' ), 99, 3 );
+        add_filter( 'fl_builder_photo_module_url', array( $this, 'filter_bb_photo_url' ), 99, 2 );
+        add_filter( 'fl_builder_photo_module_cropped_url', array( $this, 'filter_bb_photo_cropped_url' ), 99, 3 );
+
+        // Widget filters.
+        add_filter( 'widget_display_callback', array( $this, 'filter_widget' ), 99 );
+        add_filter( 'widget_block_content', array( $this, 'filter_content' ), 99 );
+
+        // Custom CSS filter.
+        add_filter( 'wp_get_custom_css', array( $this, 'filter_content' ), 99 );
+
+        // Theme customizer filters.
+        add_filter( 'theme_mod_background_image', array( $this, 'filter_single_url' ), 99 );
+        add_filter( 'theme_mod_header_image', array( $this, 'filter_single_url' ), 99 );
     }
 
     /**
@@ -181,7 +204,7 @@ class BNOG_URL_Rewriter {
      * @return string Modified content.
      */
     public function filter_content( $content ) {
-        if ( empty( $content ) || ! $this->is_cdn_available() ) {
+        if ( empty( $content ) || ! is_string( $content ) || ! $this->is_cdn_available() ) {
             return $content;
         }
 
@@ -191,32 +214,110 @@ class BNOG_URL_Rewriter {
             return $content;
         }
 
+        // First, process img tags with wp-image-X class (like WP Offload Media).
+        // This allows us to get the attachment ID directly.
+        $content = $this->filter_img_tags( $content );
+
         // Get upload directory info.
         $upload_dir = wp_upload_dir();
-        $base_url   = preg_quote( $upload_dir['baseurl'], '/' );
+        $base_url   = $upload_dir['baseurl'];
+
+        // Create pattern that matches the base URL with or without scheme.
+        $base_url_no_scheme = preg_replace( '/^https?:/', '', $base_url );
+        $base_url_patterns  = array(
+            preg_quote( $base_url, '/' ),
+            preg_quote( $base_url_no_scheme, '/' ),
+        );
 
         // Build file extension pattern.
-        $config        = bunny_net_offload_gelform()->get_config();
-        $sync_all      = ! empty( $config['sync_all_files'] );
+        $config   = bunny_net_offload_gelform()->get_config();
+        $sync_all = ! empty( $config['sync_all_files'] );
 
         // Image extensions are always included.
-        $extensions = 'jpg|jpeg|png|gif|webp';
+        $extensions = 'jpg|jpeg|png|gif|webp|svg';
 
         // Add other file types if sync_all_files is enabled.
         if ( $sync_all ) {
             $extensions .= '|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|mp3|mp4|mov|avi|wmv|flv|ogg|wav|txt|csv';
         }
 
-        // Match media URLs in content.
-        $pattern = '/(' . $base_url . '\/[^\s"\'<>]+\.(?:' . $extensions . '))/i';
+        // Match media URLs in content using all base URL variations.
+        foreach ( $base_url_patterns as $base_pattern ) {
+            $pattern = '/(' . $base_pattern . '\/[^\s"\'<>\)]+\.(?:' . $extensions . '))(?=["\'\s<>\)]|$)/i';
 
-        $content = preg_replace_callback(
-            $pattern,
-            function ( $matches ) {
-                return $this->local_url_to_cdn( $matches[1] );
-            },
-            $content
-        );
+            $content = preg_replace_callback(
+                $pattern,
+                function ( $matches ) {
+                    return $this->local_url_to_cdn( $matches[1] );
+                },
+                $content
+            );
+        }
+
+        return $content;
+    }
+
+    /**
+     * Filter img tags to rewrite URLs using wp-image-X class to get attachment ID.
+     *
+     * @param string $content Content with img tags.
+     * @return string Modified content.
+     */
+    private function filter_img_tags( $content ) {
+        // Find all img tags.
+        if ( ! preg_match_all( '/<img [^>]+>/', $content, $matches ) || empty( $matches[0] ) ) {
+            return $content;
+        }
+
+        $replacements = array();
+
+        foreach ( array_unique( $matches[0] ) as $img_tag ) {
+            // Try to get attachment ID from wp-image-X class.
+            if ( ! preg_match( '/wp-image-([0-9]+)/i', $img_tag, $class_match ) ) {
+                continue;
+            }
+
+            $attachment_id = (int) $class_match[1];
+
+            // Check if this attachment is synced.
+            $is_synced = get_post_meta( $attachment_id, '_bnog_synced', true );
+            if ( ! $is_synced ) {
+                continue;
+            }
+
+            // Get the src attribute.
+            if ( ! preg_match( '/src=["\']([^"\']+)["\']/', $img_tag, $src_match ) ) {
+                continue;
+            }
+
+            $original_src = $src_match[1];
+
+            // Skip if already a CDN URL.
+            $cdn_base = $this->get_effective_cdn_url();
+            if ( strpos( $original_src, $cdn_base ) !== false ) {
+                continue;
+            }
+
+            // Convert to CDN URL.
+            $cdn_src = $this->local_url_to_cdn( $original_src );
+
+            if ( $cdn_src !== $original_src ) {
+                $new_img_tag = str_replace( $original_src, $cdn_src, $img_tag );
+
+                // Also update srcset if present.
+                if ( preg_match( '/srcset=["\']([^"\']+)["\']/', $new_img_tag, $srcset_match ) ) {
+                    $new_srcset  = $this->filter_srcset_string( $srcset_match[1] );
+                    $new_img_tag = str_replace( $srcset_match[1], $new_srcset, $new_img_tag );
+                }
+
+                $replacements[ $img_tag ] = $new_img_tag;
+            }
+        }
+
+        // Apply all replacements.
+        if ( ! empty( $replacements ) ) {
+            $content = str_replace( array_keys( $replacements ), array_values( $replacements ), $content );
+        }
 
         return $content;
     }
@@ -254,14 +355,25 @@ class BNOG_URL_Rewriter {
      * @return string CDN URL or original if not convertible.
      */
     public function local_url_to_cdn( $local_url ) {
+        if ( empty( $local_url ) || ! is_string( $local_url ) ) {
+            return $local_url;
+        }
+
         $cdn_base_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_base_url ) ) {
             return $local_url;
         }
 
-        // Already a CDN URL.
-        if ( strpos( $local_url, $cdn_base_url ) !== false ) {
+        // Already a CDN URL - check both with and without scheme.
+        $cdn_base_no_scheme = preg_replace( '/^https?:/', '', $cdn_base_url );
+        if ( strpos( $local_url, $cdn_base_url ) !== false || strpos( $local_url, $cdn_base_no_scheme ) !== false ) {
+            return $local_url;
+        }
+
+        // Also check if it's already the Bunny.net CDN URL (original hostname).
+        $config = bunny_net_offload_gelform()->get_config();
+        if ( ! empty( $config['cdn_url'] ) && strpos( $local_url, $config['cdn_url'] ) !== false ) {
             return $local_url;
         }
 
@@ -269,17 +381,39 @@ class BNOG_URL_Rewriter {
         $upload_dir = wp_upload_dir();
         $base_url   = $upload_dir['baseurl'];
 
-        // Check if this is an upload URL.
-        if ( strpos( $local_url, $base_url ) !== false ) {
-            // Get the relative path.
-            $relative = str_replace( $base_url, '', $local_url );
+        // Create variations of base URL (with http, https, and scheme-less).
+        $base_url_https     = preg_replace( '/^http:/', 'https:', $base_url );
+        $base_url_http      = preg_replace( '/^https:/', 'http:', $base_url );
+        $base_url_no_scheme = preg_replace( '/^https?:/', '', $base_url );
+
+        // Check against all variations of upload URL.
+        $relative = null;
+
+        if ( strpos( $local_url, $base_url_https ) !== false ) {
+            $relative = str_replace( $base_url_https, '', $local_url );
+        } elseif ( strpos( $local_url, $base_url_http ) !== false ) {
+            $relative = str_replace( $base_url_http, '', $local_url );
+        } elseif ( strpos( $local_url, $base_url_no_scheme ) !== false ) {
+            $relative = str_replace( $base_url_no_scheme, '', $local_url );
+        } elseif ( strpos( $local_url, '/wp-content/uploads/' ) !== false ) {
+            // Fallback: check for relative uploads path.
+            $pos = strpos( $local_url, '/wp-content/uploads/' );
+            $relative = substr( $local_url, $pos + strlen( '/wp-content/uploads' ) );
+        }
+
+        if ( null !== $relative ) {
             return trailingslashit( $cdn_base_url ) . 'wp-content/uploads' . $relative;
         }
 
         // Try site URL replacement.
-        $site_url = site_url();
+        $site_url            = site_url();
+        $site_url_no_scheme  = preg_replace( '/^https?:/', '', $site_url );
+
         if ( strpos( $local_url, $site_url ) !== false ) {
             $relative = str_replace( $site_url, '', $local_url );
+            return trailingslashit( $cdn_base_url ) . ltrim( $relative, '/' );
+        } elseif ( strpos( $local_url, $site_url_no_scheme ) !== false ) {
+            $relative = str_replace( $site_url_no_scheme, '', $local_url );
             return trailingslashit( $cdn_base_url ) . ltrim( $relative, '/' );
         }
 
@@ -536,5 +670,283 @@ class BNOG_URL_Rewriter {
 
         // URL doesn't match original CDN base, return as-is.
         return $stored_cdn_url;
+    }
+
+    /**
+     * Filter wp_prepare_attachment_for_js data.
+     *
+     * This is critical for Beaver Builder which uses FLBuilderPhoto::get_attachment_data()
+     * that internally calls wp_prepare_attachment_for_js().
+     *
+     * @param array       $response   Array of prepared attachment data.
+     * @param WP_Post     $attachment Attachment object.
+     * @param array|false $meta       Array of attachment meta data, or false if none.
+     * @return array Modified response.
+     */
+    public function filter_attachment_for_js( $response, $attachment, $meta ) {
+        if ( ! $this->is_cdn_available() ) {
+            return $response;
+        }
+
+        $attachment_id = $attachment->ID;
+
+        // Filter the main URL.
+        $cdn_url = get_post_meta( $attachment_id, '_bnog_cdn_url', true );
+        if ( ! empty( $cdn_url ) ) {
+            $cdn_url = $this->rewrite_cdn_url_with_effective_base( $cdn_url );
+            $response['url'] = $cdn_url;
+
+            // Also update the link if it points to the attachment file.
+            if ( ! empty( $response['link'] ) && strpos( $response['link'], 'wp-content/uploads' ) !== false ) {
+                $response['link'] = $cdn_url;
+            }
+        }
+
+        // Filter all size URLs.
+        if ( ! empty( $response['sizes'] ) && is_array( $response['sizes'] ) ) {
+            foreach ( $response['sizes'] as $size_name => &$size_data ) {
+                // Try to get size-specific CDN URL.
+                $size_cdn_url = get_post_meta( $attachment_id, '_bnog_cdn_url_' . $size_name, true );
+
+                if ( ! empty( $size_cdn_url ) ) {
+                    $size_data['url'] = $this->rewrite_cdn_url_with_effective_base( $size_cdn_url );
+                } elseif ( ! empty( $cdn_url ) ) {
+                    // Construct size URL from main CDN URL.
+                    $size_data['url'] = $this->local_url_to_cdn( $size_data['url'] );
+                }
+            }
+        }
+
+        return $response;
+    }
+
+    /**
+     * Filter attachment metadata.
+     *
+     * @param array $data          Attachment metadata.
+     * @param int   $attachment_id Attachment ID.
+     * @return array Modified metadata.
+     */
+    public function filter_attachment_metadata( $data, $attachment_id ) {
+        if ( ! is_array( $data ) || ! $this->is_cdn_available() ) {
+            return $data;
+        }
+
+        // Check if being used in a content filter context where we need encoded filenames.
+        global $wp_current_filter;
+        if ( is_array( $wp_current_filter ) && in_array( 'the_content', $wp_current_filter, true ) ) {
+            // Encode filenames for URL matching (like WP Offload Media does).
+            if ( ! empty( $data['file'] ) ) {
+                $data['file'] = rawurlencode( basename( $data['file'] ) );
+            }
+
+            if ( ! empty( $data['sizes'] ) && is_array( $data['sizes'] ) ) {
+                foreach ( $data['sizes'] as $size_name => &$size_data ) {
+                    if ( ! empty( $size_data['file'] ) ) {
+                        $size_data['file'] = rawurlencode( $size_data['file'] );
+                    }
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Filter Beaver Builder photo data.
+     *
+     * @param object $data     Photo data object.
+     * @param object $settings Module settings.
+     * @param string $node     Module node ID.
+     * @return object Modified photo data.
+     */
+    public function filter_bb_photo_data( $data, $settings, $node ) {
+        if ( ! is_object( $data ) || ! $this->is_cdn_available() ) {
+            return $data;
+        }
+
+        // Get attachment ID from data.
+        $attachment_id = isset( $data->id ) ? $data->id : 0;
+
+        if ( ! $attachment_id ) {
+            return $data;
+        }
+
+        // Filter main URL.
+        $cdn_url = get_post_meta( $attachment_id, '_bnog_cdn_url', true );
+        if ( ! empty( $cdn_url ) ) {
+            $cdn_url = $this->rewrite_cdn_url_with_effective_base( $cdn_url );
+            $data->url = $cdn_url;
+
+            if ( isset( $data->link ) && strpos( $data->link, 'wp-content/uploads' ) !== false ) {
+                $data->link = $cdn_url;
+            }
+        }
+
+        // Filter sizes.
+        if ( isset( $data->sizes ) && is_object( $data->sizes ) ) {
+            foreach ( $data->sizes as $size_name => $size_obj ) {
+                if ( ! is_object( $size_obj ) || ! isset( $size_obj->url ) ) {
+                    continue;
+                }
+
+                // Try size-specific CDN URL.
+                $size_cdn_url = get_post_meta( $attachment_id, '_bnog_cdn_url_' . $size_name, true );
+
+                if ( ! empty( $size_cdn_url ) ) {
+                    $size_obj->url = $this->rewrite_cdn_url_with_effective_base( $size_cdn_url );
+                } elseif ( ! empty( $cdn_url ) ) {
+                    $size_obj->url = $this->local_url_to_cdn( $size_obj->url );
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Filter Beaver Builder photo module URL.
+     *
+     * This is the final URL filter for the photo module src.
+     *
+     * @param string $url    Photo URL.
+     * @param object $module Photo module instance.
+     * @return string Filtered URL.
+     */
+    public function filter_bb_photo_url( $url, $module ) {
+        if ( empty( $url ) || ! $this->is_cdn_available() ) {
+            return $url;
+        }
+
+        // Try to get the attachment ID from module settings.
+        $attachment_id = 0;
+        if ( isset( $module->settings->photo ) && is_numeric( $module->settings->photo ) ) {
+            $attachment_id = (int) $module->settings->photo;
+        } elseif ( isset( $module->data->id ) ) {
+            $attachment_id = (int) $module->data->id;
+        }
+
+        if ( $attachment_id ) {
+            // Check if this attachment is synced.
+            $is_synced = get_post_meta( $attachment_id, '_bnog_synced', true );
+
+            if ( $is_synced ) {
+                // Convert the URL to CDN.
+                return $this->local_url_to_cdn( $url );
+            }
+        }
+
+        // Fallback: try to convert using URL pattern matching.
+        return $this->local_url_to_cdn( $url );
+    }
+
+    /**
+     * Filter Beaver Builder cropped photo URL.
+     *
+     * @param string $url          Cropped photo URL.
+     * @param array  $cropped_path Cropped path info.
+     * @param object $module       Photo module instance.
+     * @return string Filtered URL.
+     */
+    public function filter_bb_photo_cropped_url( $url, $cropped_path, $module ) {
+        // Cropped images are stored locally in BB's cache folder.
+        // We don't rewrite these as they're not on the CDN.
+        return $url;
+    }
+
+    /**
+     * Filter widget instance data.
+     *
+     * @param array $instance Widget instance.
+     * @return array Modified instance.
+     */
+    public function filter_widget( $instance ) {
+        if ( empty( $instance ) || ! is_array( $instance ) || ! $this->is_cdn_available() ) {
+            return $instance;
+        }
+
+        foreach ( $instance as $key => $value ) {
+            if ( is_string( $value ) && ! empty( $value ) ) {
+                // Check if it's a URL or contains content with URLs.
+                if ( $this->is_local_media_url( $value ) ) {
+                    $instance[ $key ] = $this->local_url_to_cdn( $value );
+                } elseif ( strpos( $value, 'wp-content/uploads' ) !== false ) {
+                    // Might be content with embedded URLs.
+                    $instance[ $key ] = $this->filter_content( $value );
+                }
+            }
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Filter a single URL value.
+     *
+     * @param string $url URL to filter.
+     * @return string Filtered URL.
+     */
+    public function filter_single_url( $url ) {
+        if ( empty( $url ) || ! $this->is_cdn_available() ) {
+            return $url;
+        }
+
+        return $this->local_url_to_cdn( $url );
+    }
+
+    /**
+     * Check if a URL is a local media URL.
+     *
+     * @param string $url URL to check.
+     * @return bool True if local media URL.
+     */
+    private function is_local_media_url( $url ) {
+        if ( empty( $url ) || ! is_string( $url ) ) {
+            return false;
+        }
+
+        // Check if it looks like a URL.
+        if ( strpos( $url, 'http' ) !== 0 && strpos( $url, '//' ) !== 0 ) {
+            return false;
+        }
+
+        // Check if it's a local upload URL.
+        $upload_dir = wp_upload_dir();
+        $base_url   = $upload_dir['baseurl'];
+
+        return strpos( $url, $base_url ) !== false || strpos( $url, 'wp-content/uploads' ) !== false;
+    }
+
+    /**
+     * Get attachment ID from a URL.
+     *
+     * @param string $url URL to check.
+     * @return int Attachment ID or 0 if not found.
+     */
+    public function get_attachment_id_from_url( $url ) {
+        global $wpdb;
+
+        // Remove size suffix to get base filename.
+        $url = preg_replace( '/-\d+x\d+(?=\.[a-z]+$)/i', '', $url );
+
+        // Get the path relative to uploads.
+        $upload_dir = wp_upload_dir();
+        $base_url   = $upload_dir['baseurl'];
+
+        if ( strpos( $url, $base_url ) === false ) {
+            return 0;
+        }
+
+        $path = str_replace( $base_url . '/', '', $url );
+
+        // Query for attachment by path.
+        $attachment_id = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s",
+                $path
+            )
+        );
+
+        return $attachment_id ? (int) $attachment_id : 0;
     }
 }
