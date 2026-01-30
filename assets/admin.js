@@ -44,6 +44,9 @@
 
             // Delete local files button
             $('#bnog-delete-local-btn').on('click', this.handleDeleteLocalFiles);
+
+            // Resize and compress files button
+            $('#bnog-resize-compress-btn').on('click', this.handleResizeCompress);
         },
 
         /**
@@ -365,6 +368,52 @@
                     if (response.success) {
                         $message.text(bnogAdmin.strings.deleteLocalQueued).addClass('success');
                         // Reload page to show progress UI
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        $message.text(response.data.message || bnogAdmin.strings.error).addClass('error');
+                        $btn.prop('disabled', false);
+                    }
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    $message.text(bnogAdmin.strings.error).addClass('error');
+                }
+            });
+        },
+
+        /**
+         * Handle resize and compress files button click.
+         *
+         * @param {Event} e Click event.
+         */
+        handleResizeCompress: function(e) {
+            e.preventDefault();
+
+            var $btn = $(this);
+            var $section = $btn.closest('.bnog-resize-compress-section');
+            var $spinner = $section.find('.spinner');
+            var $message = $section.find('.bnog-status-message');
+
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
+            $message.text(bnogAdmin.strings.resizingCompressing).removeClass('success error');
+
+            $.ajax({
+                url: bnogAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'bnog_resize_compress_files',
+                    nonce: bnogAdmin.nonce
+                },
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+
+                    if (response.success) {
+                        $message.text(bnogAdmin.strings.resizeCompressQueued).addClass('success');
+                        // Reload page to show sync progress UI
                         setTimeout(function() {
                             window.location.reload();
                         }, 1500);

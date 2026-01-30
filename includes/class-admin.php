@@ -41,6 +41,7 @@ class BNOG_Admin {
         add_action( 'wp_ajax_bnog_save_settings', array( $this, 'ajax_save_settings' ) );
         add_action( 'wp_ajax_bnog_purge_cache', array( $this, 'ajax_purge_cache' ) );
         add_action( 'wp_ajax_bnog_delete_local_files', array( $this, 'ajax_delete_local_files' ) );
+        add_action( 'wp_ajax_bnog_resize_compress_files', array( $this, 'ajax_resize_compress_files' ) );
     }
 
     /**
@@ -103,6 +104,8 @@ class BNOG_Admin {
                     'confirmDeleteLocal'     => __( 'Are you sure you want to delete local files? This will permanently remove files from your server that are already on the CDN. This cannot be undone.', 'bunny-net-offload-gelform' ),
                     'deletingLocal'          => __( 'Queuing files for deletion...', 'bunny-net-offload-gelform' ),
                     'deleteLocalQueued'      => __( 'Local file deletion started. The page will refresh.', 'bunny-net-offload-gelform' ),
+                    'resizingCompressing'    => __( 'Queuing files for processing...', 'bunny-net-offload-gelform' ),
+                    'resizeCompressQueued'   => __( 'Processing started. The page will refresh.', 'bunny-net-offload-gelform' ),
                 ),
             )
         );
@@ -655,6 +658,31 @@ class BNOG_Admin {
                             </tr>
                         </table>
 
+                        <p class="submit">
+                            <button type="submit" class="button button-primary" id="bnog-save-btn">
+                                <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
+                            </button>
+                            <span class="spinner"></span>
+                            <span class="bnog-status-message"></span>
+                        </p>
+
+                        <?php if ( ! empty( $config['keep_local_files'] ) ) : ?>
+                            <hr class="bnog-divider">
+
+                            <h3><?php esc_html_e( 'Bulk Image Processing', 'bunny-net-offload-gelform' ); ?></h3>
+
+                            <div class="bnog-resize-compress-section">
+                                <button type="button" class="button" id="bnog-resize-compress-btn">
+                                    <?php esc_html_e( 'Resize and Compress Files', 'bunny-net-offload-gelform' ); ?>
+                                </button>
+                                <span class="spinner"></span>
+                                <span class="bnog-status-message"></span>
+                                <p class="description">
+                                    <?php esc_html_e( 'Resize and compress existing image files on the server using the above settings. Files will also be re-synced to CDN.', 'bunny-net-offload-gelform' ); ?>
+                                </p>
+                            </div>
+                        <?php endif; ?>
+
                         <hr class="bnog-divider">
 
                         <h3><?php esc_html_e( 'Cache', 'bunny-net-offload-gelform' ); ?></h3>
@@ -669,14 +697,6 @@ class BNOG_Admin {
                                 <?php esc_html_e( 'Clear all cached files from the CDN edge servers.', 'bunny-net-offload-gelform' ); ?>
                             </p>
                         </div>
-
-                        <p class="submit">
-                            <button type="submit" class="button button-primary" id="bnog-save-btn">
-                                <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
-                            </button>
-                            <span class="spinner"></span>
-                            <span class="bnog-status-message"></span>
-                        </p>
                     </form>
                 </div>
             </div>
@@ -915,6 +935,79 @@ class BNOG_Admin {
                 'message' => sprintf(
                     /* translators: %d: number of files */
                     __( 'Processing %d files. Local copies will be deleted after verifying they exist on CDN.', 'bunny-net-offload-gelform' ),
+                    count( $attachments )
+                ),
+                'total'   => count( $attachments ),
+            )
+        );
+    }
+
+    /**
+     * AJAX handler for resize and compress files.
+     */
+    public function ajax_resize_compress_files() {
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        // Get all image attachments (both synced and unsynced) that have local files.
+        global $wpdb;
+
+        $attachments = $wpdb->get_col(
+            "SELECT p.ID FROM {$wpdb->posts} p
+            WHERE p.post_type = 'attachment'
+            AND p.post_status = 'inherit'
+            AND p.post_mime_type LIKE 'image/%'"
+        );
+
+        // Convert to integers.
+        $attachments = array_map( 'intval', $attachments );
+
+        if ( empty( $attachments ) ) {
+            wp_send_json_success(
+                array(
+                    'message' => __( 'No image files found to process.', 'bunny-net-offload-gelform' ),
+                    'total'   => 0,
+                )
+            );
+        }
+
+        // Clear the synced flag for all attachments so they get reprocessed.
+        $wpdb->query(
+            "DELETE FROM {$wpdb->postmeta}
+            WHERE meta_key = '_bnog_synced'
+            AND post_id IN (" . implode( ',', $attachments ) . ')'
+        );
+
+        // Store sync status with resize option enabled.
+        update_option(
+            'bnog_sync_status',
+            array(
+                'total'              => count( $attachments ),
+                'processed'          => 0,
+                'errors'             => 0,
+                'running'            => true,
+                'started'            => time(),
+                'resize_before_sync' => true,
+            )
+        );
+
+        // Add all to sync queue.
+        update_option( 'bnog_upload_queue', $attachments );
+
+        // Trigger immediate processing via cron.
+        wp_schedule_single_event( time(), 'bnog_process_queue' );
+
+        wp_send_json_success(
+            array(
+                'message' => sprintf(
+                    /* translators: %d: number of files */
+                    __( 'Processing %d images. Files will be resized, compressed, and re-synced to CDN.', 'bunny-net-offload-gelform' ),
                     count( $attachments )
                 ),
                 'total'   => count( $attachments ),
