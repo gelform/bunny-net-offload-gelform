@@ -311,6 +311,7 @@ class BNOG_Admin {
         $unsynced_count = bunny_net_offload_gelform()->media_handler->get_unsynced_count();
         $regions        = bunny_net_offload_gelform()->api->get_available_regions();
         $region_name    = isset( $regions[ $config['storage_region'] ] ) ? $regions[ $config['storage_region'] ]['name'] : $config['storage_region'];
+        $sync_all_files = ! empty( $config['sync_all_files'] );
 
         // Check if sync is currently running by looking at the queue.
         $sync_status  = get_option( 'bnog_sync_status', array() );
@@ -367,7 +368,7 @@ class BNOG_Admin {
                                 <div class="bnog-sync-stats">
                                     <span class="bnog-stat">
                                         <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
-                                        <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
+                                        <?php echo $sync_all_files ? esc_html__( 'files on CDN', 'bunny-net-offload-gelform' ) : esc_html__( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
                                     </span>
                                     <span class="bnog-stat bnog-stat-pending">
                                         <strong><?php echo esc_html( number_format( count( $sync_queue ) ) ); ?></strong>
@@ -389,7 +390,7 @@ class BNOG_Admin {
                             <div class="bnog-sync-stats">
                                 <span class="bnog-stat">
                                     <strong><?php echo esc_html( number_format( $synced_count ) ); ?></strong>
-                                    <?php esc_html_e( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
+                                    <?php echo $sync_all_files ? esc_html__( 'files on CDN', 'bunny-net-offload-gelform' ) : esc_html__( 'images on CDN', 'bunny-net-offload-gelform' ); ?>
                                 </span>
                                 <?php if ( $unsynced_count > 0 ) : ?>
                                     <span class="bnog-stat bnog-stat-pending">
@@ -538,6 +539,21 @@ class BNOG_Admin {
                                     </p>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-sync-all-files"><?php esc_html_e( 'Sync All File Types', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="sync_all_files" id="bnog-sync-all-files" value="1"
+                                            <?php checked( ! empty( $config['sync_all_files'] ) ); ?>>
+                                        <?php esc_html_e( 'Also sync non-image files (PDFs, documents, videos, etc.) to CDN', 'bunny-net-offload-gelform' ); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e( 'When enabled, all media library files will be synced to the CDN, not just images.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
                         </table>
 
                         <p class="submit">
@@ -596,6 +612,7 @@ class BNOG_Admin {
                 'png_compression'  => 6,
                 'webp_quality'     => 82,
                 'keep_local_files' => true,
+                'sync_all_files'   => true,
             )
         );
 
@@ -646,6 +663,7 @@ class BNOG_Admin {
         $config['png_compression']  = $png_compression;
         $config['webp_quality']     = $webp_quality;
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
+        $config['sync_all_files']   = ! empty( $_POST['sync_all_files'] );
 
         update_option( 'bnog_config', $config );
 
