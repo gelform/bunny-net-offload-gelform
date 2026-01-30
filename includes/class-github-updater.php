@@ -243,22 +243,28 @@ class BNOG_GitHub_Updater {
 
 		$current_version = BNOG_VERSION;
 
+		$plugin = array(
+			'slug'         => dirname( $this->config['slug'] ),
+			'plugin'       => $this->config['slug'],
+			'new_version'  => $new_version,
+			'url'          => $this->config['github_url'],
+			'package'      => $this->get_zip_url(),
+			'icons'        => array(),
+			'banners'      => array(),
+			'tested'       => '',
+			'requires'     => '5.8',
+			'requires_php' => '7.4',
+		);
+
 		// Compare versions.
 		if ( version_compare( $new_version, $current_version, '>' ) ) {
-			$plugin = array(
-				'slug'         => dirname( $this->config['slug'] ),
-				'plugin'       => $this->config['slug'],
-				'new_version'  => $new_version,
-				'url'          => $this->config['github_url'],
-				'package'      => $this->get_zip_url(),
-				'icons'        => array(),
-				'banners'      => array(),
-				'tested'       => '',
-				'requires'     => '5.8',
-				'requires_php' => '7.4',
-			);
-
 			$transient->response[ $this->config['slug'] ] = (object) $plugin;
+		} else {
+			// No update available - add to no_update to enable auto-update UI.
+			if ( ! isset( $transient->no_update ) ) {
+				$transient->no_update = array();
+			}
+			$transient->no_update[ $this->config['slug'] ] = (object) $plugin;
 		}
 
 		return $transient;
