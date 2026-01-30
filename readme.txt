@@ -4,7 +4,7 @@ Tags: cdn, bunny, image optimization, performance, offload
 Requires at least: 5.8
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -23,6 +23,9 @@ Bunny.net Offload by Gelform provides effortless image optimization and CDN deli
 * **URL Rewriting**: Automatically rewrites image URLs to use CDN
 * **Background Sync**: Sync existing media library in the background
 * **Responsive Images**: Full srcset support for responsive images
+* **Custom CDN Domain**: Use your own domain for CDN URLs
+* **All File Types**: Optionally sync PDFs, documents, videos, and other files
+* **Page Builder Compatible**: Works with Beaver Builder and other page builders
 
 = How It Works =
 
@@ -66,7 +69,7 @@ Yes, the plugin uses WordPress's standard image filters, so it works with any th
 
 = Can I use a custom domain for the CDN? =
 
-The plugin uses Bunny.net's default b-cdn.net subdomain. Custom domains can be configured through the Bunny.net dashboard.
+Yes! You can configure a custom CDN domain in the Advanced settings tab. First set up the custom hostname in your Bunny.net dashboard, then enter the domain in the plugin settings.
 
 == Screenshots ==
 
@@ -75,6 +78,26 @@ The plugin uses Bunny.net's default b-cdn.net subdomain. Custom domains can be c
 3. Dashboard - manage your CDN settings
 
 == Changelog ==
+
+= 1.0.4 =
+* UI improvements for admin settings page
+* Move Purge CDN Cache to Advanced tab
+* Deep link to storage zone file manager in Bunny.net dashboard
+* Change storage zone naming prefix for clearer identification
+
+= 1.0.3 =
+* UI improvements and code review fixes
+
+= 1.0.2 =
+* Beaver Builder compatibility - proper URL rewriting for BB photo modules
+* Exclude BB cache/cropped images from CDN rewriting (served locally like WP Offload Media)
+* Add comprehensive content filtering with img tag parsing
+
+= 1.0.1 =
+* Custom CDN domain support - use your own domain for CDN URLs
+* Support for syncing non-image files (PDFs, documents, videos)
+* Improved URL rewriting with scheme-agnostic matching
+* Security improvements and code review fixes
 
 = 1.0.0 =
 * Initial release
@@ -86,6 +109,15 @@ The plugin uses Bunny.net's default b-cdn.net subdomain. Custom domains can be c
 * Admin dashboard for settings management
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+UI improvements and better Bunny.net dashboard integration.
+
+= 1.0.2 =
+Adds Beaver Builder compatibility for image modules.
+
+= 1.0.1 =
+Adds custom CDN domain support and non-image file syncing.
 
 = 1.0.0 =
 Initial release of Bunny.net Offload by Gelform.
