@@ -28,6 +28,13 @@ class BNOG_URL_Rewriter {
     private $availability_cache = array();
 
     /**
+     * Cached effective CDN URL.
+     *
+     * @var string|null
+     */
+    private $effective_cdn_url = null;
+
+    /**
      * Constructor.
      */
     public function __construct() {
@@ -131,7 +138,7 @@ class BNOG_URL_Rewriter {
             return $sources;
         }
 
-        $cdn_base_url = bunny_net_offload_gelform()->get_config( 'cdn_url' );
+        $cdn_base_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_base_url ) ) {
             return $sources;
@@ -173,7 +180,7 @@ class BNOG_URL_Rewriter {
             return $content;
         }
 
-        $cdn_base_url = bunny_net_offload_gelform()->get_config( 'cdn_url' );
+        $cdn_base_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_base_url ) ) {
             return $content;
@@ -242,7 +249,7 @@ class BNOG_URL_Rewriter {
      * @return string CDN URL or original if not convertible.
      */
     public function local_url_to_cdn( $local_url ) {
-        $cdn_base_url = bunny_net_offload_gelform()->get_config( 'cdn_url' );
+        $cdn_base_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_base_url ) ) {
             return $local_url;
@@ -281,19 +288,27 @@ class BNOG_URL_Rewriter {
      * @return string Local URL or original if not convertible.
      */
     public function cdn_url_to_local( $cdn_url ) {
-        $cdn_base_url = bunny_net_offload_gelform()->get_config( 'cdn_url' );
+        $cdn_base_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_base_url ) ) {
             return $cdn_url;
         }
 
-        // Check if this is a CDN URL.
-        if ( strpos( $cdn_url, $cdn_base_url ) === false ) {
-            return $cdn_url;
+        // Check if this is a CDN URL (check both custom and default).
+        $relative = null;
+        if ( strpos( $cdn_url, $cdn_base_url ) !== false ) {
+            $relative = str_replace( trailingslashit( $cdn_base_url ), '', $cdn_url );
+        } else {
+            // Also check against the original CDN URL if custom domain is set.
+            $config = bunny_net_offload_gelform()->get_config();
+            if ( ! empty( $config['cdn_url'] ) && strpos( $cdn_url, $config['cdn_url'] ) !== false ) {
+                $relative = str_replace( trailingslashit( $config['cdn_url'] ), '', $cdn_url );
+            }
         }
 
-        // Get the relative path.
-        $relative = str_replace( trailingslashit( $cdn_base_url ), '', $cdn_url );
+        if ( null === $relative ) {
+            return $cdn_url;
+        }
 
         // Check if it's an upload path.
         if ( strpos( $relative, 'wp-content/uploads' ) === 0 ) {
@@ -414,7 +429,7 @@ class BNOG_URL_Rewriter {
         }
 
         // Do a quick HEAD request to check CDN availability.
-        $cdn_url = bunny_net_offload_gelform()->get_config( 'cdn_url' );
+        $cdn_url = $this->get_effective_cdn_url();
 
         if ( empty( $cdn_url ) ) {
             $this->availability_cache[ $cache_key ] = false;
@@ -444,5 +459,32 @@ class BNOG_URL_Rewriter {
     public function clear_availability_cache() {
         delete_transient( 'bnog_cdn_available' );
         $this->availability_cache = array();
+        $this->effective_cdn_url  = null;
+    }
+
+    /**
+     * Get the effective CDN URL (custom domain or default).
+     *
+     * If a custom CDN domain is configured, it will be used instead of
+     * the default Bunny.net CDN URL.
+     *
+     * @return string The CDN base URL (with https://).
+     */
+    public function get_effective_cdn_url() {
+        if ( null !== $this->effective_cdn_url ) {
+            return $this->effective_cdn_url;
+        }
+
+        $config = bunny_net_offload_gelform()->get_config();
+
+        // Check for custom domain first.
+        if ( ! empty( $config['custom_cdn_domain'] ) ) {
+            $this->effective_cdn_url = 'https://' . $config['custom_cdn_domain'];
+            return $this->effective_cdn_url;
+        }
+
+        // Fall back to default CDN URL.
+        $this->effective_cdn_url = ! empty( $config['cdn_url'] ) ? $config['cdn_url'] : '';
+        return $this->effective_cdn_url;
     }
 }
