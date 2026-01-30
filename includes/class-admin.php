@@ -257,7 +257,7 @@ class BNOG_Admin {
                 <div class="bnog-header-actions">
                     <a href="https://dash.bunny.net/" target="_blank" rel="noopener noreferrer" class="button button-link">
                         <?php esc_html_e( 'Bunny.net', 'bunny-net-offload-gelform' ); ?>
-                        <span class="dashicons dashicons-external" style="font-size: 14px; line-height: 1.5; width: 14px; height: 14px;"></span>
+                        <span class="dashicons dashicons-external bnog-external-icon"></span>
                     </a>
                     <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
                         <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>
@@ -333,14 +333,15 @@ class BNOG_Admin {
                 <div class="bnog-header-actions">
                     <?php
                     // Build deep link to storage zone in Bunny.net dashboard.
-                    $storage_zone_id   = ! empty( $config['storage_zone_id'] ) ? $config['storage_zone_id'] : '';
+                    // Use absint() to normalize the ID and prevent malformed URLs.
+                    $storage_zone_id     = ! empty( $config['storage_zone_id'] ) ? absint( $config['storage_zone_id'] ) : 0;
                     $bunny_dashboard_url = $storage_zone_id
                         ? 'https://dash.bunny.net/storage/' . $storage_zone_id . '/file-manager'
                         : 'https://dash.bunny.net/';
                     ?>
                     <a href="<?php echo esc_url( $bunny_dashboard_url ); ?>" target="_blank" rel="noopener noreferrer" class="button button-link">
                         <?php esc_html_e( 'Bunny.net', 'bunny-net-offload-gelform' ); ?>
-                        <span class="dashicons dashicons-external" style="font-size: 14px; line-height: 1.5; width: 14px; height: 14px;"></span>
+                        <span class="dashicons dashicons-external bnog-external-icon"></span>
                     </a>
                     <button type="button" class="button button-link bnog-disconnect-btn" id="bnog-disconnect">
                         <?php esc_html_e( 'Disconnect', 'bunny-net-offload-gelform' ); ?>

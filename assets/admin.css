@@ -177,6 +177,14 @@
     text-decoration: none;
 }
 
+/* External Link Icon */
+.bnog-external-icon {
+    font-size: 14px;
+    line-height: 1.5;
+    width: 14px;
+    height: 14px;
+}
+
 /* Disconnect Button */
 .bnog-disconnect-btn {
     color: #a00 !important;
