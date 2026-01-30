@@ -347,12 +347,13 @@ class BNOG_Bunny_API {
     /**
      * Setup CDN: Create storage zone and pull zone.
      *
-     * @param string $region Region code.
+     * @param string      $region            Region code.
+     * @param string|null $custom_zone_name  Optional custom zone name. If null, auto-generates.
      * @return array|WP_Error Result with zone details or error.
      */
-    public function setup_cdn( $region = 'DE' ) {
-        // Generate unique zone name.
-        $zone_name = $this->generate_zone_name();
+    public function setup_cdn( $region = 'DE', $custom_zone_name = null ) {
+        // Use custom zone name if provided, otherwise generate one.
+        $zone_name = ! empty( $custom_zone_name ) ? $custom_zone_name : $this->generate_zone_name();
 
         // Create storage zone.
         $storage_response = $this->create_storage_zone( $zone_name, $region );

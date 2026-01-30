@@ -41,6 +41,9 @@
 
             // Tab switching
             $('.bnog-tab-btn').on('click', this.handleTabSwitch);
+
+            // Delete local files button
+            $('#bnog-delete-local-btn').on('click', this.handleDeleteLocalFiles);
         },
 
         /**
@@ -154,7 +157,8 @@
                 data: {
                     action: 'bnog_setup_cdn',
                     nonce: bnogAdmin.nonce,
-                    region: $('#bnog-region').val()
+                    region: $('#bnog-region').val(),
+                    storage_name: $('#bnog-storage-name').val()
                 },
                 success: function(response) {
                     $form.removeClass('bnog-loading');
@@ -317,6 +321,56 @@
                         }, 3000);
                     } else {
                         $message.text(response.data.message || bnogAdmin.strings.error).addClass('error');
+                    }
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    $message.text(bnogAdmin.strings.error).addClass('error');
+                }
+            });
+        },
+
+        /**
+         * Handle delete local files button click.
+         *
+         * @param {Event} e Click event.
+         */
+        handleDeleteLocalFiles: function(e) {
+            e.preventDefault();
+
+            if (!confirm(bnogAdmin.strings.confirmDeleteLocal)) {
+                return;
+            }
+
+            var $btn = $(this);
+            var $section = $btn.closest('.bnog-delete-local-section');
+            var $spinner = $section.find('.spinner');
+            var $message = $section.find('.bnog-delete-local-status');
+
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
+            $message.text(bnogAdmin.strings.deletingLocal).removeClass('success error');
+
+            $.ajax({
+                url: bnogAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'bnog_delete_local_files',
+                    nonce: bnogAdmin.nonce
+                },
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+
+                    if (response.success) {
+                        $message.text(bnogAdmin.strings.deleteLocalQueued).addClass('success');
+                        // Reload page to show progress UI
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        $message.text(response.data.message || bnogAdmin.strings.error).addClass('error');
+                        $btn.prop('disabled', false);
                     }
                 },
                 error: function() {
