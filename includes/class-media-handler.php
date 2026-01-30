@@ -45,6 +45,7 @@ class BNOG_Media_Handler {
 
         // Background processing cron.
         add_action( 'bnog_process_queue', array( $this, 'process_queue' ) );
+        add_action( 'bnog_process_delete_local_queue', array( $this, 'process_delete_local_queue' ) );
 
         // AJAX handlers for sync.
         add_action( 'wp_ajax_bnog_sync_media', array( $this, 'ajax_sync_media' ) );
@@ -334,6 +335,164 @@ class BNOG_Media_Handler {
             $status['running'] = false;
             update_option( 'bnog_sync_status', $status );
         }
+    }
+
+    /**
+     * Process delete local files queue (cron job).
+     *
+     * Deletes local files that are verified to exist on CDN.
+     */
+    public function process_delete_local_queue() {
+        $queue = get_option( 'bnog_delete_local_queue', array() );
+
+        if ( empty( $queue ) ) {
+            // Clear running status when queue is empty.
+            $status = get_option( 'bnog_delete_local_status', array() );
+            if ( ! empty( $status['running'] ) ) {
+                $status['running'] = false;
+                update_option( 'bnog_delete_local_status', $status );
+            }
+            return;
+        }
+
+        // Process in batches of 10.
+        $batch = array_slice( $queue, 0, 10 );
+
+        foreach ( $batch as $attachment_id ) {
+            $result = $this->delete_local_attachment_files( $attachment_id );
+
+            // Remove from queue regardless of result.
+            $this->remove_from_delete_local_queue( $attachment_id );
+
+            // Update status.
+            $status = get_option( 'bnog_delete_local_status', array() );
+            $status['processed'] = isset( $status['processed'] ) ? $status['processed'] + 1 : 1;
+
+            if ( true === $result ) {
+                $status['deleted'] = isset( $status['deleted'] ) ? $status['deleted'] + 1 : 1;
+            } elseif ( 'skipped' === $result ) {
+                $status['skipped'] = isset( $status['skipped'] ) ? $status['skipped'] + 1 : 1;
+            } else {
+                $status['errors'] = isset( $status['errors'] ) ? $status['errors'] + 1 : 1;
+            }
+
+            update_option( 'bnog_delete_local_status', $status );
+        }
+
+        // Check if queue is now empty.
+        $remaining_queue = get_option( 'bnog_delete_local_queue', array() );
+        if ( empty( $remaining_queue ) ) {
+            $status = get_option( 'bnog_delete_local_status', array() );
+            $status['running'] = false;
+            update_option( 'bnog_delete_local_status', $status );
+        } else {
+            // Schedule next batch.
+            wp_schedule_single_event( time() + 1, 'bnog_process_delete_local_queue' );
+        }
+    }
+
+    /**
+     * Remove attachment from delete local queue.
+     *
+     * @param int $attachment_id Attachment ID.
+     */
+    private function remove_from_delete_local_queue( $attachment_id ) {
+        $queue = get_option( 'bnog_delete_local_queue', array() );
+        $queue = array_diff( $queue, array( $attachment_id ) );
+        update_option( 'bnog_delete_local_queue', array_values( $queue ) );
+    }
+
+    /**
+     * Delete local files for an attachment after verifying they exist on CDN.
+     *
+     * @param int $attachment_id Attachment ID.
+     * @return bool|string True on success, 'skipped' if not on CDN, false on error.
+     */
+    private function delete_local_attachment_files( $attachment_id ) {
+        $main_file = get_attached_file( $attachment_id );
+
+        if ( ! $main_file ) {
+            return 'skipped';
+        }
+
+        // Check if main file exists locally - if not, nothing to delete.
+        if ( ! file_exists( $main_file ) ) {
+            return 'skipped';
+        }
+
+        // Verify file exists on CDN before deleting locally.
+        $remote_path = bunny_net_offload_gelform()->storage->path_to_remote_path( $main_file );
+        if ( ! bunny_net_offload_gelform()->storage->exists( $remote_path ) ) {
+            bunny_net_offload_gelform()->log(
+                sprintf( 'Skipping local delete for attachment %d: not found on CDN', $attachment_id ),
+                'warning'
+            );
+            return 'skipped';
+        }
+
+        // Get metadata for thumbnails.
+        $metadata     = wp_get_attachment_metadata( $attachment_id );
+        $thumb_files  = array();
+        $all_verified = true;
+
+        if ( ! empty( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
+            $upload_dir = dirname( $main_file );
+
+            foreach ( $metadata['sizes'] as $size_name => $size_data ) {
+                $thumb_file = $upload_dir . '/' . $size_data['file'];
+
+                if ( ! file_exists( $thumb_file ) ) {
+                    continue;
+                }
+
+                // Verify thumbnail exists on CDN.
+                $thumb_remote_path = bunny_net_offload_gelform()->storage->path_to_remote_path( $thumb_file );
+                if ( ! bunny_net_offload_gelform()->storage->exists( $thumb_remote_path ) ) {
+                    $all_verified = false;
+                    bunny_net_offload_gelform()->log(
+                        sprintf( 'Thumbnail %s for attachment %d not found on CDN', $size_name, $attachment_id ),
+                        'warning'
+                    );
+                } else {
+                    $thumb_files[] = $thumb_file;
+                }
+            }
+        }
+
+        // Only delete if all files are verified on CDN.
+        if ( ! $all_verified ) {
+            return 'skipped';
+        }
+
+        // Delete main file.
+        wp_delete_file( $main_file );
+
+        // Delete original file if WordPress created a scaled version.
+        if ( ! empty( $metadata['original_image'] ) ) {
+            $upload_dir    = dirname( $main_file );
+            $original_file = $upload_dir . '/' . $metadata['original_image'];
+            if ( file_exists( $original_file ) ) {
+                // Verify original exists on CDN.
+                $original_remote_path = bunny_net_offload_gelform()->storage->path_to_remote_path( $original_file );
+                if ( bunny_net_offload_gelform()->storage->exists( $original_remote_path ) ) {
+                    wp_delete_file( $original_file );
+                }
+            }
+        }
+
+        // Delete thumbnail files.
+        foreach ( $thumb_files as $thumb_file ) {
+            if ( file_exists( $thumb_file ) ) {
+                wp_delete_file( $thumb_file );
+            }
+        }
+
+        bunny_net_offload_gelform()->log(
+            sprintf( 'Deleted local files for attachment %d after CDN verification.', $attachment_id ),
+            'info'
+        );
+
+        return true;
     }
 
     /**

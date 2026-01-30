@@ -40,6 +40,7 @@ class BNOG_Admin {
         add_action( 'wp_ajax_bnog_setup_cdn', array( $this, 'ajax_setup_cdn' ) );
         add_action( 'wp_ajax_bnog_save_settings', array( $this, 'ajax_save_settings' ) );
         add_action( 'wp_ajax_bnog_purge_cache', array( $this, 'ajax_purge_cache' ) );
+        add_action( 'wp_ajax_bnog_delete_local_files', array( $this, 'ajax_delete_local_files' ) );
     }
 
     /**
@@ -88,17 +89,20 @@ class BNOG_Admin {
                 'nonce'     => wp_create_nonce( 'bnog_admin_nonce' ),
                 'authUrl'   => bunny_net_offload_gelform()->auth->get_auth_url(),
                 'strings'   => array(
-                    'settingUp'      => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
-                    'success'        => __( 'Success!', 'bunny-net-offload-gelform' ),
-                    'error'          => __( 'Error', 'bunny-net-offload-gelform' ),
-                    'saving'         => __( 'Saving...', 'bunny-net-offload-gelform' ),
-                    'saved'          => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
-                    'syncing'        => __( 'Syncing in progress...', 'bunny-net-offload-gelform' ),
-                    'syncComplete'   => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
-                    'syncBackground' => __( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ),
-                    'confirmDelete'  => __( 'Are you sure you want to disconnect? This will not delete your CDN content.', 'bunny-net-offload-gelform' ),
-                    'purging'        => __( 'Purging cache...', 'bunny-net-offload-gelform' ),
-                    'purged'         => __( 'Cache purged!', 'bunny-net-offload-gelform' ),
+                    'settingUp'              => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
+                    'success'                => __( 'Success!', 'bunny-net-offload-gelform' ),
+                    'error'                  => __( 'Error', 'bunny-net-offload-gelform' ),
+                    'saving'                 => __( 'Saving...', 'bunny-net-offload-gelform' ),
+                    'saved'                  => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
+                    'syncing'                => __( 'Syncing in progress...', 'bunny-net-offload-gelform' ),
+                    'syncComplete'           => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
+                    'syncBackground'         => __( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ),
+                    'confirmDelete'          => __( 'Are you sure you want to disconnect? This will not delete your CDN content.', 'bunny-net-offload-gelform' ),
+                    'purging'                => __( 'Purging cache...', 'bunny-net-offload-gelform' ),
+                    'purged'                 => __( 'Cache purged!', 'bunny-net-offload-gelform' ),
+                    'confirmDeleteLocal'     => __( 'Are you sure you want to delete local files? This will permanently remove files from your server that are already on the CDN. This cannot be undone.', 'bunny-net-offload-gelform' ),
+                    'deletingLocal'          => __( 'Queuing files for deletion...', 'bunny-net-offload-gelform' ),
+                    'deleteLocalQueued'      => __( 'Local file deletion started. The page will refresh.', 'bunny-net-offload-gelform' ),
                 ),
             )
         );
@@ -246,7 +250,8 @@ class BNOG_Admin {
      * @param array $config Current configuration.
      */
     private function render_setup_screen( $config ) {
-        $regions = bunny_net_offload_gelform()->api->get_available_regions();
+        $regions           = bunny_net_offload_gelform()->api->get_available_regions();
+        $default_zone_name = bunny_net_offload_gelform()->api->generate_zone_name();
         ?>
         <div class="bnog-card bnog-card-setup">
             <div class="bnog-card-header">
@@ -288,6 +293,19 @@ class BNOG_Admin {
                                 </select>
                                 <p class="description">
                                     <?php esc_html_e( 'Choose a region closest to your primary audience.', 'bunny-net-offload-gelform' ); ?>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">
+                                <label for="bnog-storage-name"><?php esc_html_e( 'Storage Name', 'bunny-net-offload-gelform' ); ?></label>
+                            </th>
+                            <td>
+                                <input type="text" name="storage_name" id="bnog-storage-name" class="regular-text"
+                                    value="<?php echo esc_attr( $default_zone_name ); ?>"
+                                    pattern="[a-z0-9\-]+" maxlength="63">
+                                <p class="description">
+                                    <?php esc_html_e( 'The name for your Bunny.net storage zone. It\'s recommended not to change this unless you\'re setting up a custom domain. Avoid using your full domain name.', 'bunny-net-offload-gelform' ); ?>
                                 </p>
                             </td>
                         </tr>
@@ -581,6 +599,43 @@ class BNOG_Admin {
                                     <p class="description">
                                         <?php esc_html_e( 'Disable to save local disk space. Warning: If disabled, files cannot be recovered if removed from CDN.', 'bunny-net-offload-gelform' ); ?>
                                     </p>
+                                    <?php if ( empty( $config['keep_local_files'] ) ) : ?>
+                                        <?php
+                                        // Check if delete local files operation is running.
+                                        $delete_status  = get_option( 'bnog_delete_local_status', array() );
+                                        $delete_queue   = get_option( 'bnog_delete_local_queue', array() );
+                                        $delete_running = ! empty( $delete_status['running'] ) && ! empty( $delete_queue );
+                                        ?>
+                                        <div class="bnog-delete-local-section" style="margin-top: 10px;">
+                                            <?php if ( $delete_running ) : ?>
+                                                <div class="bnog-delete-local-in-progress">
+                                                    <span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>
+                                                    <span class="bnog-delete-local-text">
+                                                        <?php
+                                                        printf(
+                                                            /* translators: %d: number of files remaining */
+                                                            esc_html__( 'Deleting local files... %d remaining', 'bunny-net-offload-gelform' ),
+                                                            count( $delete_queue )
+                                                        );
+                                                        ?>
+                                                    </span>
+                                                    <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small" style="margin-left: 10px;">
+                                                        <span class="dashicons dashicons-update" style="vertical-align: middle;"></span>
+                                                        <?php esc_html_e( 'Refresh', 'bunny-net-offload-gelform' ); ?>
+                                                    </a>
+                                                </div>
+                                            <?php else : ?>
+                                                <button type="button" class="button" id="bnog-delete-local-btn">
+                                                    <?php esc_html_e( 'Delete Local Files', 'bunny-net-offload-gelform' ); ?>
+                                                </button>
+                                                <span class="spinner" style="float: none;"></span>
+                                                <span class="bnog-delete-local-status"></span>
+                                                <p class="description" style="margin-top: 5px;">
+                                                    <?php esc_html_e( 'Delete local copies of files that are already on the CDN. Files will be verified on CDN before deletion.', 'bunny-net-offload-gelform' ); ?>
+                                                </p>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <tr>
@@ -643,7 +698,8 @@ class BNOG_Admin {
         }
 
         // Get settings from request.
-        $region = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : 'NY';
+        $region       = isset( $_POST['region'] ) ? sanitize_text_field( wp_unslash( $_POST['region'] ) ) : 'NY';
+        $storage_name = isset( $_POST['storage_name'] ) ? sanitize_text_field( wp_unslash( $_POST['storage_name'] ) ) : '';
 
         // Validate region.
         $valid_regions = array_keys( bunny_net_offload_gelform()->api->get_available_regions() );
@@ -651,8 +707,23 @@ class BNOG_Admin {
             $region = 'NY';
         }
 
+        // Validate and sanitize storage name.
+        if ( ! empty( $storage_name ) ) {
+            // Remove invalid characters (only allow lowercase alphanumeric and hyphens).
+            $storage_name = preg_replace( '/[^a-z0-9\-]/', '', strtolower( $storage_name ) );
+            // Limit length to 63 characters (Bunny.net limit).
+            $storage_name = substr( $storage_name, 0, 63 );
+            // Remove leading/trailing hyphens.
+            $storage_name = trim( $storage_name, '-' );
+        }
+
+        // Fall back to generated name if empty after sanitization.
+        if ( empty( $storage_name ) ) {
+            $storage_name = null;
+        }
+
         // Setup CDN.
-        $result = bunny_net_offload_gelform()->api->setup_cdn( $region );
+        $result = bunny_net_offload_gelform()->api->setup_cdn( $region, $storage_name );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( array( 'message' => $result->get_error_message() ) );
@@ -781,5 +852,73 @@ class BNOG_Admin {
         bunny_net_offload_gelform()->url_rewriter->clear_availability_cache();
 
         wp_send_json_success( array( 'message' => __( 'CDN cache purged successfully!', 'bunny-net-offload-gelform' ) ) );
+    }
+
+    /**
+     * AJAX handler for deleting local files that are on CDN.
+     */
+    public function ajax_delete_local_files() {
+        // Verify nonce with proper JSON error response.
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+        }
+
+        // Get all synced attachments that still have local files.
+        global $wpdb;
+
+        $attachments = $wpdb->get_col(
+            "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm
+            INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            WHERE pm.meta_key = '_bnog_synced'
+            AND p.post_type = 'attachment'
+            AND p.post_status = 'inherit'"
+        );
+
+        // Convert to integers.
+        $attachments = array_map( 'intval', $attachments );
+
+        if ( empty( $attachments ) ) {
+            wp_send_json_success(
+                array(
+                    'message' => __( 'No synced files found to process.', 'bunny-net-offload-gelform' ),
+                    'total'   => 0,
+                )
+            );
+        }
+
+        // Store delete status.
+        update_option(
+            'bnog_delete_local_status',
+            array(
+                'total'     => count( $attachments ),
+                'processed' => 0,
+                'deleted'   => 0,
+                'skipped'   => 0,
+                'errors'    => 0,
+                'running'   => true,
+                'started'   => time(),
+            )
+        );
+
+        // Add all to delete queue.
+        update_option( 'bnog_delete_local_queue', $attachments );
+
+        // Trigger immediate processing via cron.
+        wp_schedule_single_event( time(), 'bnog_process_delete_local_queue' );
+
+        wp_send_json_success(
+            array(
+                'message' => sprintf(
+                    /* translators: %d: number of files */
+                    __( 'Processing %d files. Local copies will be deleted after verifying they exist on CDN.', 'bunny-net-offload-gelform' ),
+                    count( $attachments )
+                ),
+                'total'   => count( $attachments ),
+            )
+        );
     }
 }
