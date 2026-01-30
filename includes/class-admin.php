@@ -688,8 +688,8 @@ class BNOG_Admin {
 
                             <div class="bnog-resize-compress-section">
                                 <?php if ( $is_bulk_processing ) : ?>
-                                    <div class="bnog-bulk-processing-in-progress">
-                                        <span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>
+                                    <div class="bnog-bulk-processing-in-progress bnog-sync-running-notice">
+                                        <span class="spinner is-active"></span>
                                         <span class="bnog-bulk-processing-text">
                                             <?php
                                             printf(
@@ -699,8 +699,8 @@ class BNOG_Admin {
                                             );
                                             ?>
                                         </span>
-                                        <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small" style="margin-left: 10px;">
-                                            <span class="dashicons dashicons-update" style="vertical-align: middle;"></span>
+                                        <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small bnog-refresh-btn">
+                                            <span class="dashicons dashicons-update"></span>
                                             <?php esc_html_e( 'Refresh', 'bunny-net-offload-gelform' ); ?>
                                         </a>
                                     </div>
