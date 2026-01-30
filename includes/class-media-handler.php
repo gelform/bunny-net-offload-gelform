@@ -110,8 +110,13 @@ class BNOG_Media_Handler {
             return;
         }
 
-        // Skip non-images.
-        if ( ! bunny_net_offload_gelform()->image_processor->is_processable_image( $file_path ) ) {
+        // Check if this is an image or if sync_all_files is enabled.
+        $is_image   = bunny_net_offload_gelform()->image_processor->is_processable_image( $file_path );
+        $config     = bunny_net_offload_gelform()->get_config();
+        $sync_all   = ! empty( $config['sync_all_files'] );
+
+        // Skip non-images if sync_all_files is not enabled.
+        if ( ! $is_image && ! $sync_all ) {
             return;
         }
 
@@ -139,8 +144,13 @@ class BNOG_Media_Handler {
             return $metadata;
         }
 
-        // Skip non-images.
-        if ( ! bunny_net_offload_gelform()->image_processor->is_processable_image( $main_file ) ) {
+        // Check if this is an image or if sync_all_files is enabled.
+        $is_image = bunny_net_offload_gelform()->image_processor->is_processable_image( $main_file );
+        $config   = bunny_net_offload_gelform()->get_config();
+        $sync_all = ! empty( $config['sync_all_files'] );
+
+        // Skip non-images if sync_all_files is not enabled.
+        if ( ! $is_image && ! $sync_all ) {
             return $metadata;
         }
 
@@ -153,7 +163,6 @@ class BNOG_Media_Handler {
             update_post_meta( $attachment_id, '_bnog_synced', true );
 
             // Optionally delete local file.
-            $config = bunny_net_offload_gelform()->get_config();
             if ( empty( $config['keep_local_files'] ) ) {
                 wp_delete_file( $main_file );
             }
@@ -161,8 +170,8 @@ class BNOG_Media_Handler {
             bunny_net_offload_gelform()->log( 'Failed to upload main file: ' . $cdn_url->get_error_message(), 'error' );
         }
 
-        // Upload thumbnails.
-        if ( ! empty( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
+        // Upload thumbnails (only for images).
+        if ( $is_image && ! empty( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
             $upload_dir = dirname( $main_file );
 
             foreach ( $metadata['sizes'] as $size_name => $size_data ) {
@@ -468,10 +477,13 @@ class BNOG_Media_Handler {
         // Get resize option.
         $resize_before_sync = ! empty( $_POST['resize_before_sync'] );
 
-        // Get all image attachments not yet synced.
+        // Check if we should sync all files or just images.
+        $config   = bunny_net_offload_gelform()->get_config();
+        $sync_all = ! empty( $config['sync_all_files'] );
+
+        // Get attachments not yet synced.
         $args = array(
             'post_type'      => 'attachment',
-            'post_mime_type' => 'image',
             'post_status'    => 'inherit',
             'posts_per_page' => -1,
             'fields'         => 'ids',
@@ -483,12 +495,21 @@ class BNOG_Media_Handler {
             ),
         );
 
+        // Only sync images if sync_all_files is not enabled.
+        if ( ! $sync_all ) {
+            $args['post_mime_type'] = 'image';
+        }
+
         $attachments = get_posts( $args );
 
         if ( empty( $attachments ) ) {
+            $already_synced_message = $sync_all
+                ? __( 'All files are already synced.', 'bunny-net-offload-gelform' )
+                : __( 'All images are already synced.', 'bunny-net-offload-gelform' );
+
             wp_send_json_success(
                 array(
-                    'message' => __( 'All images are already synced.', 'bunny-net-offload-gelform' ),
+                    'message' => $already_synced_message,
                     'total'   => 0,
                 )
             );
@@ -514,14 +535,20 @@ class BNOG_Media_Handler {
         // Trigger immediate processing.
         wp_schedule_single_event( time(), 'bnog_process_queue' );
 
-        $message = $resize_before_sync
-            ? __( 'Syncing %d images with resizing. This will happen in the background.', 'bunny-net-offload-gelform' )
-            : __( 'Syncing %d images. This will happen in the background.', 'bunny-net-offload-gelform' );
+        if ( $sync_all ) {
+            $message = $resize_before_sync
+                ? __( 'Syncing %d files with image resizing. This will happen in the background.', 'bunny-net-offload-gelform' )
+                : __( 'Syncing %d files. This will happen in the background.', 'bunny-net-offload-gelform' );
+        } else {
+            $message = $resize_before_sync
+                ? __( 'Syncing %d images with resizing. This will happen in the background.', 'bunny-net-offload-gelform' )
+                : __( 'Syncing %d images. This will happen in the background.', 'bunny-net-offload-gelform' );
+        }
 
         wp_send_json_success(
             array(
                 'message' => sprintf(
-                    /* translators: %d: number of images */
+                    /* translators: %d: number of files */
                     $message,
                     count( $attachments )
                 ),
@@ -605,14 +632,17 @@ class BNOG_Media_Handler {
     }
 
     /**
-     * Get count of unsynced images.
+     * Get count of unsynced files.
      *
      * @return int
      */
     public function get_unsynced_count() {
+        // Check if we should count all files or just images.
+        $config   = bunny_net_offload_gelform()->get_config();
+        $sync_all = ! empty( $config['sync_all_files'] );
+
         $args = array(
             'post_type'      => 'attachment',
-            'post_mime_type' => 'image',
             'post_status'    => 'inherit',
             'posts_per_page' => -1,
             'fields'         => 'ids',
@@ -623,6 +653,11 @@ class BNOG_Media_Handler {
                 ),
             ),
         );
+
+        // Only count images if sync_all_files is not enabled.
+        if ( ! $sync_all ) {
+            $args['post_mime_type'] = 'image';
+        }
 
         $attachments = get_posts( $args );
 

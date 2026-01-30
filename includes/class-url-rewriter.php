@@ -163,7 +163,7 @@ class BNOG_URL_Rewriter {
     }
 
     /**
-     * Filter post content to rewrite image URLs.
+     * Filter post content to rewrite media URLs.
      *
      * @param string $content Post content.
      * @return string Modified content.
@@ -183,8 +183,20 @@ class BNOG_URL_Rewriter {
         $upload_dir = wp_upload_dir();
         $base_url   = preg_quote( $upload_dir['baseurl'], '/' );
 
-        // Match image URLs in content.
-        $pattern = '/(' . $base_url . '\/[^\s"\'<>]+\.(?:jpg|jpeg|png|gif|webp))/i';
+        // Build file extension pattern.
+        $config        = bunny_net_offload_gelform()->get_config();
+        $sync_all      = ! empty( $config['sync_all_files'] );
+
+        // Image extensions are always included.
+        $extensions = 'jpg|jpeg|png|gif|webp';
+
+        // Add other file types if sync_all_files is enabled.
+        if ( $sync_all ) {
+            $extensions .= '|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|mp3|mp4|mov|avi|wmv|flv|ogg|wav|txt|csv';
+        }
+
+        // Match media URLs in content.
+        $pattern = '/(' . $base_url . '\/[^\s"\'<>]+\.(?:' . $extensions . '))/i';
 
         $content = preg_replace_callback(
             $pattern,
