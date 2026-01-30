@@ -72,6 +72,36 @@ class BNOG_GitHub_Updater {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
 		add_filter( 'upgrader_post_install', array( $this, 'post_install' ), 10, 3 );
+
+		// Enable auto-updates support for this plugin.
+		add_filter( 'auto_update_plugin', array( $this, 'auto_update_plugin' ), 10, 2 );
+	}
+
+	/**
+	 * Allow auto-updates for this plugin.
+	 *
+	 * By default, WordPress only allows auto-updates for plugins from WordPress.org.
+	 * This filter enables auto-updates for our GitHub-hosted plugin when the user
+	 * has enabled auto-updates for it.
+	 *
+	 * @param bool|null $update Whether to update the plugin. Null to use default behavior.
+	 * @param object    $item   The plugin update object.
+	 * @return bool|null Whether to auto-update.
+	 */
+	public function auto_update_plugin( $update, $item ) {
+		// Only handle our plugin.
+		if ( ! isset( $item->plugin ) || $item->plugin !== $this->config['slug'] ) {
+			return $update;
+		}
+
+		// Check if user has enabled auto-updates for this plugin.
+		$auto_updates = (array) get_site_option( 'auto_update_plugins', array() );
+
+		if ( in_array( $this->config['slug'], $auto_updates, true ) ) {
+			return true;
+		}
+
+		return $update;
 	}
 
 	/**
