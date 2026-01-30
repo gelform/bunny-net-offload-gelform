@@ -21,6 +21,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 class BNOG_URL_Rewriter {
 
     /**
+     * Paths to exclude from CDN URL rewriting.
+     *
+     * These are plugin cache/generated paths that won't exist on CDN.
+     *
+     * @var array
+     */
+    private const EXCLUDED_PATHS = array(
+        '/bb-plugin/',        // Beaver Builder cache/cropped images.
+        '/bb-theme/',         // Beaver Builder theme cache.
+        '/fl-builder/',       // Beaver Builder alternate path.
+        '/cache/',            // Generic cache folders.
+        '/bwg_',              // Photo Gallery plugin.
+        '/wpcf7_',            // Contact Form 7.
+    );
+
+    /**
      * Cache for CDN URL availability checks.
      *
      * @var array
@@ -366,17 +382,7 @@ class BNOG_URL_Rewriter {
         }
 
         // Exclude plugin cache/generated paths that won't exist on CDN.
-        // Beaver Builder stores cropped images in bb-plugin/cache/ or just bb-plugin/.
-        $excluded_paths = array(
-            '/bb-plugin/',        // Beaver Builder cache/cropped images.
-            '/bb-theme/',         // Beaver Builder theme cache.
-            '/fl-builder/',       // Beaver Builder alternate path.
-            '/cache/',            // Generic cache folders.
-            '/bwg_',              // Photo Gallery plugin.
-            '/wpcf7_',            // Contact Form 7.
-        );
-
-        foreach ( $excluded_paths as $excluded ) {
+        foreach ( self::EXCLUDED_PATHS as $excluded ) {
             if ( strpos( $local_url, $excluded ) !== false ) {
                 return $local_url;
             }
@@ -753,8 +759,16 @@ class BNOG_URL_Rewriter {
         global $wp_current_filter;
         if ( is_array( $wp_current_filter ) && in_array( 'the_content', $wp_current_filter, true ) ) {
             // Encode filenames for URL matching (like WP Offload Media does).
+            // Preserve directory path while encoding only the filename portion.
             if ( ! empty( $data['file'] ) ) {
-                $data['file'] = rawurlencode( basename( $data['file'] ) );
+                $dir      = dirname( $data['file'] );
+                $filename = basename( $data['file'] );
+                // Only encode if there are special characters that need encoding.
+                if ( $dir && '.' !== $dir ) {
+                    $data['file'] = $dir . '/' . rawurlencode( $filename );
+                } else {
+                    $data['file'] = rawurlencode( $filename );
+                }
             }
 
             if ( ! empty( $data['sizes'] ) && is_array( $data['sizes'] ) ) {
@@ -932,38 +946,5 @@ class BNOG_URL_Rewriter {
         $base_url   = $upload_dir['baseurl'];
 
         return strpos( $url, $base_url ) !== false || strpos( $url, 'wp-content/uploads' ) !== false;
-    }
-
-    /**
-     * Get attachment ID from a URL.
-     *
-     * @param string $url URL to check.
-     * @return int Attachment ID or 0 if not found.
-     */
-    public function get_attachment_id_from_url( $url ) {
-        global $wpdb;
-
-        // Remove size suffix to get base filename.
-        $url = preg_replace( '/-\d+x\d+(?=\.[a-z]+$)/i', '', $url );
-
-        // Get the path relative to uploads.
-        $upload_dir = wp_upload_dir();
-        $base_url   = $upload_dir['baseurl'];
-
-        if ( strpos( $url, $base_url ) === false ) {
-            return 0;
-        }
-
-        $path = str_replace( $base_url . '/', '', $url );
-
-        // Query for attachment by path.
-        $attachment_id = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s",
-                $path
-            )
-        );
-
-        return $attachment_id ? (int) $attachment_id : 0;
     }
 }
