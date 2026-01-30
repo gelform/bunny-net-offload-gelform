@@ -1,0 +1,47 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create plugin zip
+        run: |
+          # Create a temporary directory with the correct plugin folder name
+          mkdir -p build/bunny-net-offload-gelform
+
+          # Copy plugin files (excluding development files)
+          rsync -av --exclude='.git' \
+                    --exclude='.github' \
+                    --exclude='.gitignore' \
+                    --exclude='build' \
+                    --exclude='node_modules' \
+                    --exclude='*.log' \
+                    --exclude='.DS_Store' \
+                    ./ build/bunny-net-offload-gelform/
+
+          # Create the zip file
+          cd build
+          zip -r bunny-net-offload-gelform.zip bunny-net-offload-gelform
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/bunny-net-offload-gelform.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

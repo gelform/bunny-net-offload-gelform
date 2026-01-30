@@ -160,6 +160,8 @@ class BNOG_GitHub_Updater {
 	/**
 	 * Get download URL for the latest release.
 	 *
+	 * Prefers the release asset (properly named zip) over GitHub's auto-generated zipball.
+	 *
 	 * @return string|false Download URL or false.
 	 */
 	private function get_zip_url() {
@@ -169,12 +171,21 @@ class BNOG_GitHub_Updater {
 			return false;
 		}
 
-		// Prefer the zipball_url from the release.
+		// Prefer release asset named 'bunny-net-offload-gelform.zip' (correctly structured).
+		if ( ! empty( $data->assets ) && is_array( $data->assets ) ) {
+			foreach ( $data->assets as $asset ) {
+				if ( isset( $asset->name ) && 'bunny-net-offload-gelform.zip' === $asset->name ) {
+					return $asset->browser_download_url;
+				}
+			}
+		}
+
+		// Fallback to zipball_url (extracts to repo-tag folder, handled by post_install).
 		if ( ! empty( $data->zipball_url ) ) {
 			return $data->zipball_url;
 		}
 
-		// Fallback to constructing the URL.
+		// Last resort: construct the URL.
 		return sprintf(
 			'https://github.com/%s/%s/archive/refs/tags/%s.zip',
 			$this->config['github_user'],
