@@ -153,12 +153,22 @@ class BNOG_Bunny_API {
      */
     public function generate_zone_name() {
         // Get the site domain and extract first 4 characters.
-        $site_url = wp_parse_url( site_url(), PHP_URL_HOST );
-        // Remove www. prefix if present.
-        $domain = preg_replace( '/^www\./', '', $site_url );
-        // Get first 4 alphanumeric characters of the domain.
-        $domain_prefix = preg_replace( '/[^a-z0-9]/', '', strtolower( $domain ) );
-        $domain_prefix = substr( $domain_prefix, 0, 4 );
+        $site_url      = wp_parse_url( site_url(), PHP_URL_HOST );
+        $domain_prefix = '';
+
+        if ( ! empty( $site_url ) ) {
+            // Remove www. prefix if present.
+            $domain = preg_replace( '/^www\./', '', $site_url );
+            // Get first 4 alphanumeric characters of the domain.
+            $domain_prefix = preg_replace( '/[^a-z0-9]/', '', strtolower( $domain ) );
+            $domain_prefix = substr( $domain_prefix, 0, 4 );
+        }
+
+        // Fallback if domain prefix is empty or too short - pad with random chars.
+        $chars = 'abcdefghijklmnopqrstuvwxyz';
+        while ( strlen( $domain_prefix ) < 4 ) {
+            $domain_prefix .= $chars[ wp_rand( 0, strlen( $chars ) - 1 ) ];
+        }
 
         // Generate a random alphanumeric string (12 chars for uniqueness).
         $chars  = 'abcdefghijklmnopqrstuvwxyz0123456789';
