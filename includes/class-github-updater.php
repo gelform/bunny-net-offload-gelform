@@ -72,23 +72,6 @@ class BNOG_GitHub_Updater {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
 		add_filter( 'upgrader_post_install', array( $this, 'post_install' ), 10, 3 );
-
-		// Increase timeout for GitHub API requests.
-		add_filter( 'http_request_timeout', array( $this, 'http_request_timeout' ), 10, 2 );
-	}
-
-	/**
-	 * Increase HTTP request timeout for GitHub.
-	 *
-	 * @param int    $timeout Current timeout.
-	 * @param string $url     Request URL.
-	 * @return int Modified timeout.
-	 */
-	public function http_request_timeout( $timeout, $url = '' ) {
-		if ( strpos( $url, 'api.github.com' ) !== false || strpos( $url, 'github.com' ) !== false ) {
-			return 15;
-		}
-		return $timeout;
 	}
 
 	/**
@@ -110,23 +93,29 @@ class BNOG_GitHub_Updater {
 			return $this->github_data;
 		}
 
-		// Fetch from GitHub API.
+		// Fetch from GitHub API with User-Agent header (required by GitHub).
 		$response = wp_remote_get(
 			$this->config['api_url'],
 			array(
+				'timeout'   => 15,
 				'sslverify' => $this->config['sslverify'],
 				'headers'   => array(
-					'Accept' => 'application/vnd.github.v3+json',
+					'Accept'     => 'application/vnd.github.v3+json',
+					'User-Agent' => 'Bunny-Net-Offload-Gelform/' . BNOG_VERSION,
 				),
 			)
 		);
 
 		if ( is_wp_error( $response ) ) {
+			// Cache failures for 5 minutes to allow quicker recovery.
+			set_site_transient( $transient_key . '_failed', true, 5 * MINUTE_IN_SECONDS );
 			return false;
 		}
 
 		$response_code = wp_remote_retrieve_response_code( $response );
 		if ( 200 !== $response_code ) {
+			// Cache failures for 5 minutes to allow quicker recovery.
+			set_site_transient( $transient_key . '_failed', true, 5 * MINUTE_IN_SECONDS );
 			return false;
 		}
 
@@ -139,7 +128,7 @@ class BNOG_GitHub_Updater {
 
 		$this->github_data = $data;
 
-		// Cache for 12 hours (twice daily check).
+		// Cache successful response for 12 hours (twice daily check).
 		set_site_transient( $transient_key, $data, 12 * HOUR_IN_SECONDS );
 
 		return $this->github_data;
@@ -159,6 +148,11 @@ class BNOG_GitHub_Updater {
 
 		// Remove 'v' prefix if present (e.g., v1.0.6 -> 1.0.6).
 		$version = ltrim( $data->tag_name, 'v' );
+
+		// Validate version format (e.g., 1.0 or 1.0.6). Return false if invalid.
+		if ( ! preg_match( '/^\d+\.\d+(\.\d+)?$/', $version ) ) {
+			return false;
+		}
 
 		return $version;
 	}
@@ -211,16 +205,16 @@ class BNOG_GitHub_Updater {
 		// Compare versions.
 		if ( version_compare( $new_version, $current_version, '>' ) ) {
 			$plugin = array(
-				'slug'        => dirname( $this->config['slug'] ),
-				'plugin'      => $this->config['slug'],
-				'new_version' => $new_version,
-				'url'         => $this->config['github_url'],
-				'package'     => $this->get_zip_url(),
-				'icons'       => array(),
-				'banners'     => array(),
-				'tested'      => '',
-				'requires'    => '5.8',
-				'requires_php'=> '7.4',
+				'slug'         => dirname( $this->config['slug'] ),
+				'plugin'       => $this->config['slug'],
+				'new_version'  => $new_version,
+				'url'          => $this->config['github_url'],
+				'package'      => $this->get_zip_url(),
+				'icons'        => array(),
+				'banners'      => array(),
+				'tested'       => '',
+				'requires'     => '5.8',
+				'requires_php' => '7.4',
 			);
 
 			$transient->response[ $this->config['slug'] ] = (object) $plugin;
@@ -255,20 +249,20 @@ class BNOG_GitHub_Updater {
 		$plugin_data = get_plugin_data( BNOG_PLUGIN_FILE );
 
 		$info = array(
-			'name'              => $plugin_data['Name'],
-			'slug'              => dirname( $this->config['slug'] ),
-			'version'           => $this->get_new_version(),
-			'author'            => $plugin_data['Author'],
-			'author_profile'    => $plugin_data['AuthorURI'],
-			'homepage'          => $this->config['github_url'],
-			'download_link'     => $this->get_zip_url(),
-			'requires'          => '5.8',
-			'tested'            => '',
-			'requires_php'      => '7.4',
-			'last_updated'      => isset( $data->published_at ) ? $data->published_at : '',
-			'sections'          => array(
-				'description'  => $plugin_data['Description'],
-				'changelog'    => $this->get_changelog( $data ),
+			'name'           => $plugin_data['Name'],
+			'slug'           => dirname( $this->config['slug'] ),
+			'version'        => $this->get_new_version(),
+			'author'         => $plugin_data['Author'],
+			'author_profile' => $plugin_data['AuthorURI'],
+			'homepage'       => $this->config['github_url'],
+			'download_link'  => $this->get_zip_url(),
+			'requires'       => '5.8',
+			'tested'         => '',
+			'requires_php'   => '7.4',
+			'last_updated'   => isset( $data->published_at ) ? $data->published_at : '',
+			'sections'       => array(
+				'description' => $plugin_data['Description'],
+				'changelog'   => $this->get_changelog( $data ),
 			),
 		);
 
@@ -286,20 +280,35 @@ class BNOG_GitHub_Updater {
 			return '<p>No changelog available.</p>';
 		}
 
-		// Convert markdown to basic HTML.
-		$changelog = esc_html( $data->body );
-		$changelog = nl2br( $changelog );
+		$changelog = $data->body;
 
-		// Convert markdown headers.
+		// Convert markdown headers first (before escaping).
 		$changelog = preg_replace( '/^### (.+)$/m', '<h4>$1</h4>', $changelog );
 		$changelog = preg_replace( '/^## (.+)$/m', '<h3>$1</h3>', $changelog );
 		$changelog = preg_replace( '/^# (.+)$/m', '<h2>$1</h2>', $changelog );
 
-		// Convert markdown lists.
+		// Convert markdown lists (non-greedy match for consecutive items).
 		$changelog = preg_replace( '/^- (.+)$/m', '<li>$1</li>', $changelog );
-		$changelog = preg_replace( '/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $changelog );
+		$changelog = preg_replace( '/((?:<li>[^<]*<\/li>\s*)+)/', '<ul>$1</ul>', $changelog );
 
-		return $changelog;
+		// Convert newlines to breaks for remaining text.
+		$changelog = nl2br( $changelog );
+
+		// Sanitize HTML, allowing only safe tags.
+		$allowed_html = array(
+			'h2'   => array(),
+			'h3'   => array(),
+			'h4'   => array(),
+			'p'    => array(),
+			'br'   => array(),
+			'ul'   => array(),
+			'li'   => array(),
+			'strong' => array(),
+			'em'   => array(),
+			'code' => array(),
+		);
+
+		return wp_kses( $changelog, $allowed_html );
 	}
 
 	/**
@@ -307,9 +316,9 @@ class BNOG_GitHub_Updater {
 	 *
 	 * Rename the extracted folder to match the plugin slug.
 	 *
-	 * @param bool  $response   Installation response.
-	 * @param array $hook_extra Extra arguments.
-	 * @param array $result     Installation result.
+	 * @param bool|WP_Error $response   Installation response.
+	 * @param array         $hook_extra Extra arguments.
+	 * @param array         $result     Installation result.
 	 * @return array Modified result.
 	 */
 	public function post_install( $response, $hook_extra, $result ) {
@@ -320,13 +329,30 @@ class BNOG_GitHub_Updater {
 			return $result;
 		}
 
+		// Check if WP_Filesystem is available.
+		if ( ! $wp_filesystem ) {
+			return $result;
+		}
+
 		// Get the proper destination folder name.
 		$proper_destination = WP_PLUGIN_DIR . '/' . $this->config['proper_folder_name'];
 
 		// Move to proper location if needed.
-		if ( $result['destination'] !== $proper_destination ) {
-			$wp_filesystem->move( $result['destination'], $proper_destination );
-			$result['destination'] = $proper_destination;
+		if ( isset( $result['destination'] ) && $result['destination'] !== $proper_destination ) {
+			$move_result = $wp_filesystem->move( $result['destination'], $proper_destination );
+
+			if ( ! $move_result ) {
+				// Move failed: keep original destination, but ensure destination_name is accurate.
+				if ( ! isset( $result['destination_name'] ) || empty( $result['destination_name'] ) ) {
+					$result['destination_name'] = basename( $result['destination'] );
+				}
+
+				return $result;
+			}
+
+			// Move succeeded: update destination and destination_name to the new location.
+			$result['destination']      = $proper_destination;
+			$result['destination_name'] = basename( $proper_destination );
 		}
 
 		// Reactivate the plugin.
@@ -347,6 +373,7 @@ class BNOG_GitHub_Updater {
 	public function clear_cache() {
 		$transient_key = 'bnog_github_release_' . md5( $this->config['api_url'] );
 		delete_site_transient( $transient_key );
+		delete_site_transient( $transient_key . '_failed' );
 		$this->github_data = null;
 	}
 }
