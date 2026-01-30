@@ -4,7 +4,7 @@ Tags: cdn, bunny, image optimization, performance, offload
 Requires at least: 5.8
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ Yes! You can configure a custom CDN domain in the Advanced settings tab. First s
 3. Dashboard - manage your CDN settings
 
 == Changelog ==
+
+= 1.0.5 =
+* Storage zone names now include site domain prefix for easier identification (e.g., wp-bass-abc123)
+* Add refresh button to sync progress screen
 
 = 1.0.4 =
 * UI improvements for admin settings page
