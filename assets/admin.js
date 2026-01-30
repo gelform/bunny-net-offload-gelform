@@ -241,24 +241,12 @@
         handleSync: function(e) {
             e.preventDefault();
 
-            var $syncSection = $('.bnog-sync-section');
+            var $btn = $(this);
+            var $spinner = $('.bnog-sync-actions .spinner');
             var resizeBeforeSync = $('#bnog-resize-before-sync').is(':checked') ? 1 : 0;
 
-            // Immediately replace form with syncing UI
-            $syncSection.html(
-                '<div class="bnog-sync-in-progress">' +
-                    '<div class="bnog-sync-stats">' +
-                        '<span class="bnog-stat bnog-stat-pending">' +
-                            '<strong class="bnog-sync-remaining">...</strong> ' + bnogAdmin.strings.syncing +
-                        '</span>' +
-                    '</div>' +
-                    '<div class="bnog-sync-running-notice">' +
-                        '<span class="spinner is-active"></span>' +
-                        '<span class="bnog-sync-running-text">' + bnogAdmin.strings.syncing + '</span>' +
-                    '</div>' +
-                    '<p class="bnog-sync-notice">' + bnogAdmin.strings.syncBackground + '</p>' +
-                '</div>'
-            );
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
 
             $.ajax({
                 url: bnogAdmin.ajaxUrl,
@@ -269,60 +257,13 @@
                     resize_before_sync: resizeBeforeSync
                 },
                 success: function(response) {
-                    if (response.success) {
-                        if (response.data.total > 0) {
-                            $('.bnog-sync-remaining').text(response.data.total);
-                            // Start polling for progress
-                            BNOGAdmin.pollSyncProgress();
-                        } else {
-                            // No images to sync
-                            $syncSection.html('<p>' + response.data.message + '</p>');
-                        }
-                    } else {
-                        $syncSection.html('<p class="bnog-status-message error">' + (response.data.message || bnogAdmin.strings.error) + '</p>');
-                    }
+                    // Reload page to show sync in progress UI
+                    window.location.reload();
                 },
                 error: function() {
-                    $syncSection.html('<p class="bnog-status-message error">' + bnogAdmin.strings.error + '</p>');
-                }
-            });
-        },
-
-        /**
-         * Poll for sync progress (simplified version).
-         */
-        pollSyncProgress: function() {
-            $.ajax({
-                url: bnogAdmin.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'bnog_get_sync_status',
-                    nonce: bnogAdmin.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        var data = response.data;
-                        var percent = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
-
-                        $('.bnog-sync-remaining').text(data.remaining);
-                        $('.bnog-sync-running-text').text(data.processed + ' / ' + data.total + ' (' + percent + '%)');
-
-                        if (data.running && data.remaining > 0) {
-                            // Continue polling
-                            setTimeout(function() {
-                                BNOGAdmin.pollSyncProgress();
-                            }, 2000);
-                        } else {
-                            // Done - reload to show updated UI
-                            window.location.reload();
-                        }
-                    }
-                },
-                error: function() {
-                    // Continue polling on error (might be temporary)
-                    setTimeout(function() {
-                        BNOGAdmin.pollSyncProgress();
-                    }, 5000);
+                    alert(bnogAdmin.strings.error);
+                    $btn.prop('disabled', false);
+                    $spinner.removeClass('is-active');
                 }
             });
         },
