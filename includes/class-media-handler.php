@@ -481,26 +481,32 @@ class BNOG_Media_Handler {
         $config   = bunny_net_offload_gelform()->get_config();
         $sync_all = ! empty( $config['sync_all_files'] );
 
-        // Get attachments not yet synced.
-        $args = array(
-            'post_type'      => 'attachment',
-            'post_status'    => 'inherit',
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-            'meta_query'     => array(
-                array(
-                    'key'     => '_bnog_synced',
-                    'compare' => 'NOT EXISTS',
-                ),
-            ),
-        );
+        // Get unsynced attachment IDs using direct SQL for better memory efficiency.
+        global $wpdb;
 
-        // Only sync images if sync_all_files is not enabled.
-        if ( ! $sync_all ) {
-            $args['post_mime_type'] = 'image';
+        if ( $sync_all ) {
+            // Get all unsynced attachments.
+            $attachments = $wpdb->get_col(
+                "SELECT p.ID FROM {$wpdb->posts} p
+                LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_bnog_synced'
+                WHERE p.post_type = 'attachment'
+                AND p.post_status = 'inherit'
+                AND pm.meta_id IS NULL"
+            );
+        } else {
+            // Get only unsynced image attachments.
+            $attachments = $wpdb->get_col(
+                "SELECT p.ID FROM {$wpdb->posts} p
+                LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_bnog_synced'
+                WHERE p.post_type = 'attachment'
+                AND p.post_status = 'inherit'
+                AND p.post_mime_type LIKE 'image/%'
+                AND pm.meta_id IS NULL"
+            );
         }
 
-        $attachments = get_posts( $args );
+        // Convert to integers.
+        $attachments = array_map( 'intval', $attachments );
 
         if ( empty( $attachments ) ) {
             $already_synced_message = $sync_all
@@ -617,7 +623,7 @@ class BNOG_Media_Handler {
     }
 
     /**
-     * Get count of synced images.
+     * Get count of synced files.
      *
      * @return int
      */
@@ -634,34 +640,40 @@ class BNOG_Media_Handler {
     /**
      * Get count of unsynced files.
      *
+     * Uses direct SQL query for better performance on large media libraries.
+     *
      * @return int
      */
     public function get_unsynced_count() {
+        global $wpdb;
+
         // Check if we should count all files or just images.
         $config   = bunny_net_offload_gelform()->get_config();
         $sync_all = ! empty( $config['sync_all_files'] );
 
-        $args = array(
-            'post_type'      => 'attachment',
-            'post_status'    => 'inherit',
-            'posts_per_page' => -1,
-            'fields'         => 'ids',
-            'meta_query'     => array(
-                array(
-                    'key'     => '_bnog_synced',
-                    'compare' => 'NOT EXISTS',
-                ),
-            ),
-        );
-
-        // Only count images if sync_all_files is not enabled.
-        if ( ! $sync_all ) {
-            $args['post_mime_type'] = 'image';
+        // Build query to count attachments without _bnog_synced meta.
+        if ( $sync_all ) {
+            // Count all attachments not synced.
+            $count = $wpdb->get_var(
+                "SELECT COUNT(p.ID) FROM {$wpdb->posts} p
+                LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_bnog_synced'
+                WHERE p.post_type = 'attachment'
+                AND p.post_status = 'inherit'
+                AND pm.meta_id IS NULL"
+            );
+        } else {
+            // Count only image attachments not synced.
+            $count = $wpdb->get_var(
+                "SELECT COUNT(p.ID) FROM {$wpdb->posts} p
+                LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_bnog_synced'
+                WHERE p.post_type = 'attachment'
+                AND p.post_status = 'inherit'
+                AND p.post_mime_type LIKE 'image/%'
+                AND pm.meta_id IS NULL"
+            );
         }
 
-        $attachments = get_posts( $args );
-
-        return count( $attachments );
+        return intval( $count );
     }
 
     /**
