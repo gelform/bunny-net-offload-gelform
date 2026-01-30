@@ -80,9 +80,9 @@ class BNOG_GitHub_Updater {
 	/**
 	 * Allow auto-updates for this plugin.
 	 *
-	 * By default, WordPress only allows auto-updates for plugins from WordPress.org.
-	 * This filter enables auto-updates for our GitHub-hosted plugin when the user
-	 * has enabled auto-updates for it.
+	 * Checks the plugin's own configuration setting to determine if auto-updates
+	 * should be enabled, rather than relying on WordPress's native auto-update UI
+	 * which doesn't work reliably for GitHub-hosted plugins.
 	 *
 	 * @param bool|null $update Whether to update the plugin. Null to use default behavior.
 	 * @param object    $item   The plugin update object.
@@ -94,10 +94,10 @@ class BNOG_GitHub_Updater {
 			return $update;
 		}
 
-		// Check if user has enabled auto-updates for this plugin.
-		$auto_updates = (array) get_site_option( 'auto_update_plugins', array() );
+		// Check if user has enabled auto-updates in plugin settings.
+		$config = get_option( 'bnog_config', array() );
 
-		if ( in_array( $this->config['slug'], $auto_updates, true ) ) {
+		if ( ! empty( $config['auto_updates'] ) ) {
 			return true;
 		}
 
@@ -256,15 +256,9 @@ class BNOG_GitHub_Updater {
 			'requires_php' => '7.4',
 		);
 
-		// Compare versions.
+		// Compare versions - only add to response if update is available.
 		if ( version_compare( $new_version, $current_version, '>' ) ) {
 			$transient->response[ $this->config['slug'] ] = (object) $plugin;
-		} else {
-			// No update available - add to no_update to enable auto-update UI.
-			if ( ! isset( $transient->no_update ) ) {
-				$transient->no_update = array();
-			}
-			$transient->no_update[ $this->config['slug'] ] = (object) $plugin;
 		}
 
 		return $transient;

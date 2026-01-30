@@ -673,6 +673,28 @@ class BNOG_Admin {
                             </tr>
                         </table>
 
+                        <hr class="bnog-divider">
+
+                        <h3><?php esc_html_e( 'Updates', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-auto-updates"><?php esc_html_e( 'Auto-Updates', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="auto_updates" id="bnog-auto-updates" value="1"
+                                            <?php checked( ! empty( $config['auto_updates'] ) ); ?>>
+                                        <?php esc_html_e( 'Automatically update this plugin when new versions are available', 'bunny-net-offload-gelform' ); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e( 'When enabled, the plugin will automatically update when WordPress runs background updates.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+
                         <p class="submit">
                             <button type="submit" class="button button-primary" id="bnog-save-btn">
                                 <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
@@ -848,6 +870,7 @@ class BNOG_Admin {
         $config['webp_quality']     = $webp_quality;
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
         $config['sync_all_files']   = ! empty( $_POST['sync_all_files'] );
+        $config['auto_updates']     = ! empty( $_POST['auto_updates'] );
 
         // Sanitize and validate custom CDN domain.
         $custom_cdn_domain = isset( $_POST['custom_cdn_domain'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_cdn_domain'] ) ) : '';
