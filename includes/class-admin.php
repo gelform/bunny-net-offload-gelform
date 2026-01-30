@@ -342,10 +342,17 @@ class BNOG_Admin {
             <!-- Status Tab -->
             <div class="bnog-tab-content active" id="bnog-tab-status">
                 <div class="bnog-card-body">
+                    <?php
+                    $effective_cdn_url = bunny_net_offload_gelform()->url_rewriter->get_effective_cdn_url();
+                    $has_custom_domain = ! empty( $config['custom_cdn_domain'] );
+                    ?>
                     <div class="bnog-info-grid">
                         <div class="bnog-info-item">
                             <label><?php esc_html_e( 'CDN URL', 'bunny-net-offload-gelform' ); ?></label>
-                            <code><?php echo esc_html( str_replace( 'https://', '', $config['cdn_url'] ) ); ?></code>
+                            <code><?php echo esc_html( str_replace( 'https://', '', $effective_cdn_url ) ); ?></code>
+                            <?php if ( $has_custom_domain ) : ?>
+                                <span class="bnog-custom-domain-badge"><?php esc_html_e( 'Custom Domain', 'bunny-net-offload-gelform' ); ?></span>
+                            <?php endif; ?>
                         </div>
                         <div class="bnog-info-item">
                             <label><?php esc_html_e( 'Storage Zone', 'bunny-net-offload-gelform' ); ?></label>
@@ -521,6 +528,34 @@ class BNOG_Admin {
 
                         <hr class="bnog-divider">
 
+                        <h3><?php esc_html_e( 'CDN Domain', 'bunny-net-offload-gelform' ); ?></h3>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-custom-cdn-domain"><?php esc_html_e( 'Custom Domain', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <input type="text" name="custom_cdn_domain" id="bnog-custom-cdn-domain"
+                                           value="<?php echo esc_attr( isset( $config['custom_cdn_domain'] ) ? $config['custom_cdn_domain'] : '' ); ?>"
+                                           class="regular-text" placeholder="cdn.yourdomain.com">
+                                    <p class="description">
+                                        <?php esc_html_e( 'Optional: Use your own domain for CDN URLs instead of the default Bunny.net domain.', 'bunny-net-offload-gelform' ); ?>
+                                        <br>
+                                        <?php
+                                        printf(
+                                            /* translators: %s: Bunny.net documentation URL */
+                                            esc_html__( 'You must configure this domain as a custom hostname in your %s first.', 'bunny-net-offload-gelform' ),
+                                            '<a href="https://dash.bunny.net/cdn" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Bunny.net dashboard', 'bunny-net-offload-gelform' ) . '</a>'
+                                        );
+                                        ?>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <hr class="bnog-divider">
+
                         <h3><?php esc_html_e( 'Storage', 'bunny-net-offload-gelform' ); ?></h3>
 
                         <table class="form-table">
@@ -665,7 +700,16 @@ class BNOG_Admin {
         $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
         $config['sync_all_files']   = ! empty( $_POST['sync_all_files'] );
 
+        // Sanitize custom CDN domain (remove protocol, trailing slashes).
+        $custom_cdn_domain = isset( $_POST['custom_cdn_domain'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_cdn_domain'] ) ) : '';
+        $custom_cdn_domain = preg_replace( '#^https?://#', '', $custom_cdn_domain );
+        $custom_cdn_domain = rtrim( $custom_cdn_domain, '/' );
+        $config['custom_cdn_domain'] = $custom_cdn_domain;
+
         update_option( 'bnog_config', $config );
+
+        // Clear URL availability cache when custom domain changes.
+        bunny_net_offload_gelform()->url_rewriter->clear_availability_cache();
 
         wp_send_json_success( array( 'message' => __( 'Settings saved!', 'bunny-net-offload-gelform' ) ) );
     }

@@ -144,26 +144,23 @@ class BNOG_Bunny_API {
     }
 
     /**
-     * Generate a unique storage zone name based on the site domain.
+     * Generate a unique storage zone name using random characters.
+     *
+     * Uses a random string format to avoid Chrome Safe Browsing warnings
+     * that can occur when zone names look like domain spoofing attempts.
      *
      * @return string
      */
     public function generate_zone_name() {
-        $site_url = site_url();
-        $host     = wp_parse_url( $site_url, PHP_URL_HOST );
+        // Generate a random alphanumeric string (12 chars for uniqueness).
+        $chars  = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        $random = '';
 
-        // Sanitize domain: replace dots with hyphens, remove invalid chars.
-        $sanitized = preg_replace( '/[^a-z0-9-]/', '', str_replace( '.', '-', strtolower( $host ) ) );
-
-        // Truncate if too long (Bunny limit is ~60 chars).
-        if ( strlen( $sanitized ) > 50 ) {
-            $sanitized = substr( $sanitized, 0, 50 );
+        for ( $i = 0; $i < 12; $i++ ) {
+            $random .= $chars[ wp_rand( 0, strlen( $chars ) - 1 ) ];
         }
 
-        // Add random suffix for uniqueness.
-        $random = substr( str_shuffle( 'abcdefghijklmnopqrstuvwxyz0123456789' ), 0, 6 );
-
-        return $sanitized . '-' . $random;
+        return 'bnog-' . $random;
     }
 
     /**
