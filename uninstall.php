@@ -27,6 +27,8 @@ delete_option( 'bnog_api_key' );
 delete_option( 'bnog_config' );
 delete_option( 'bnog_sync_status' );
 delete_option( 'bnog_upload_queue' );
+delete_option( 'bnog_delete_local_status' );
+delete_option( 'bnog_delete_local_queue' );
 
 // Delete transients.
 delete_transient( 'bnog_cdn_available' );
@@ -43,6 +45,7 @@ $wpdb->query(
 
 // Clean up scheduled events.
 wp_clear_scheduled_hook( 'bnog_process_queue' );
+wp_clear_scheduled_hook( 'bnog_process_delete_local_queue' );
 
 // Remove temp directory if exists.
 $upload_dir = wp_upload_dir();

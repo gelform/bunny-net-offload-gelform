@@ -386,8 +386,10 @@ class BNOG_Media_Handler {
             $status['running'] = false;
             update_option( 'bnog_delete_local_status', $status );
         } else {
-            // Schedule next batch.
-            wp_schedule_single_event( time() + 1, 'bnog_process_delete_local_queue' );
+            // Schedule next batch (only if not already scheduled).
+            if ( ! wp_next_scheduled( 'bnog_process_delete_local_queue' ) ) {
+                wp_schedule_single_event( time() + 1, 'bnog_process_delete_local_queue' );
+            }
         }
     }
 
