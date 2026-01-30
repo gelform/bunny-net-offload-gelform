@@ -365,6 +365,23 @@ class BNOG_URL_Rewriter {
             return $local_url;
         }
 
+        // Exclude plugin cache/generated paths that won't exist on CDN.
+        // Beaver Builder stores cropped images in bb-plugin/cache/ or just bb-plugin/.
+        $excluded_paths = array(
+            '/bb-plugin/',        // Beaver Builder cache/cropped images.
+            '/bb-theme/',         // Beaver Builder theme cache.
+            '/fl-builder/',       // Beaver Builder alternate path.
+            '/cache/',            // Generic cache folders.
+            '/bwg_',              // Photo Gallery plugin.
+            '/wpcf7_',            // Contact Form 7.
+        );
+
+        foreach ( $excluded_paths as $excluded ) {
+            if ( strpos( $local_url, $excluded ) !== false ) {
+                return $local_url;
+            }
+        }
+
         // Already a CDN URL - check both with and without scheme.
         $cdn_base_no_scheme = preg_replace( '/^https?:/', '', $cdn_base_url );
         if ( strpos( $local_url, $cdn_base_url ) !== false || strpos( $local_url, $cdn_base_no_scheme ) !== false ) {
