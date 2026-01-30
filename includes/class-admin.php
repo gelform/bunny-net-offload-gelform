@@ -407,6 +407,10 @@ class BNOG_Admin {
                                     <span class="bnog-sync-running-text">
                                         <?php esc_html_e( 'Syncing in progress...', 'bunny-net-offload-gelform' ); ?>
                                     </span>
+                                    <button type="button" class="button button-small bnog-refresh-btn" onclick="location.reload();">
+                                        <span class="dashicons dashicons-update"></span>
+                                        <?php esc_html_e( 'Refresh', 'bunny-net-offload-gelform' ); ?>
+                                    </button>
                                 </div>
                                 <p class="bnog-sync-notice">
                                     <?php esc_html_e( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ); ?>

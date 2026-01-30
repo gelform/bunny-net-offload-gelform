@@ -144,23 +144,31 @@ class BNOG_Bunny_API {
     }
 
     /**
-     * Generate a unique storage zone name using random characters.
+     * Generate a unique storage zone name using domain prefix and random characters.
      *
-     * Uses a random string format to avoid Chrome Safe Browsing warnings
-     * that can occur when zone names look like domain spoofing attempts.
+     * Format: wp-[first 4 chars of domain]-[random string]
+     * Example: wp-bass-a1b2c3d4e5f6 for basstourist.com
      *
      * @return string
      */
     public function generate_zone_name() {
-        // Generate a random alphanumeric string (16 chars for uniqueness).
+        // Get the site domain and extract first 4 characters.
+        $site_url = wp_parse_url( site_url(), PHP_URL_HOST );
+        // Remove www. prefix if present.
+        $domain = preg_replace( '/^www\./', '', $site_url );
+        // Get first 4 alphanumeric characters of the domain.
+        $domain_prefix = preg_replace( '/[^a-z0-9]/', '', strtolower( $domain ) );
+        $domain_prefix = substr( $domain_prefix, 0, 4 );
+
+        // Generate a random alphanumeric string (12 chars for uniqueness).
         $chars  = 'abcdefghijklmnopqrstuvwxyz0123456789';
         $random = '';
 
-        for ( $i = 0; $i < 16; $i++ ) {
+        for ( $i = 0; $i < 12; $i++ ) {
             $random .= $chars[ wp_rand( 0, strlen( $chars ) - 1 ) ];
         }
 
-        return 'wp-offload-' . $random;
+        return 'wp-' . $domain_prefix . '-' . $random;
     }
 
     /**

@@ -392,6 +392,19 @@
     color: #2271b1;
 }
 
+.bnog-refresh-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+}
+
+.bnog-refresh-btn .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
 .bnog-sync-notice {
     font-size: 13px;
     color: #50575e;
