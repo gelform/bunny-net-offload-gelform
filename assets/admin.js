@@ -248,6 +248,8 @@
             $btn.prop('disabled', true);
             $spinner.addClass('is-active');
 
+            var $progress = $('.bnog-sync-progress');
+
             $.ajax({
                 url: bnogAdmin.ajaxUrl,
                 type: 'POST',
@@ -257,11 +259,21 @@
                     resize_before_sync: resizeBeforeSync
                 },
                 success: function(response) {
-                    // Reload page to show sync in progress UI
-                    window.location.reload();
+                    if (response && response.success) {
+                        // Reload page to show sync in progress UI
+                        window.location.reload();
+                    } else {
+                        // Show error message inline
+                        var message = (response && response.data && response.data.message)
+                            ? response.data.message
+                            : bnogAdmin.strings.error;
+                        $progress.text(message).addClass('error');
+                        $btn.prop('disabled', false);
+                        $spinner.removeClass('is-active');
+                    }
                 },
                 error: function() {
-                    alert(bnogAdmin.strings.error);
+                    $progress.text(bnogAdmin.strings.error).addClass('error');
                     $btn.prop('disabled', false);
                     $spinner.removeClass('is-active');
                 }
