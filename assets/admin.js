@@ -15,6 +15,7 @@
         init: function() {
             this.bindEvents();
             this.initRangeInputs();
+            this.initTabFromUrl();
         },
 
         /**
@@ -85,6 +86,32 @@
             // Update tab content
             $('.bnog-tab-content').removeClass('active');
             $('#bnog-tab-' + tab).addClass('active');
+
+            // Update URL with tab parameter
+            var url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            window.history.replaceState({}, '', url);
+        },
+
+        /**
+         * Check URL for tab parameter and switch to that tab.
+         */
+        initTabFromUrl: function() {
+            var url = new URL(window.location.href);
+            var tab = url.searchParams.get('tab');
+
+            if (tab) {
+                var $btn = $('.bnog-tab-btn[data-tab="' + tab + '"]');
+                if ($btn.length) {
+                    // Update button states
+                    $('.bnog-tab-btn').removeClass('active');
+                    $btn.addClass('active');
+
+                    // Update tab content
+                    $('.bnog-tab-content').removeClass('active');
+                    $('#bnog-tab-' + tab).addClass('active');
+                }
+            }
         },
 
         /**
