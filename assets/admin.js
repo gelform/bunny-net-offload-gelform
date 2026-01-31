@@ -218,7 +218,8 @@
                     webp_quality: $('#bnog-webp-quality').val(),
                     keep_local_files: $('#bnog-keep-local').is(':checked') ? 1 : 0,
                     sync_all_files: $('#bnog-sync-all-files').is(':checked') ? 1 : 0,
-                    custom_cdn_domain: $('#bnog-custom-cdn-domain').val()
+                    custom_cdn_domain: $('#bnog-custom-cdn-domain').val(),
+                    auto_updates: $('#bnog-auto-updates').is(':checked') ? 1 : 0
                 },
                 success: function(response) {
                     $form.removeClass('bnog-loading');
