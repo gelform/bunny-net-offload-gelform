@@ -508,7 +508,11 @@ class BNOG_Media_Handler {
         $main_file = get_attached_file( $attachment_id );
 
         if ( ! $main_file || ! file_exists( $main_file ) ) {
-            return new WP_Error( 'file_not_found', __( 'Attachment file not found.', 'bunny-net-offload-gelform' ) );
+            // Mark as synced anyway so it doesn't keep showing as "waiting to sync".
+            // The file doesn't exist locally, so there's nothing to sync.
+            update_post_meta( $attachment_id, '_bnog_synced', true );
+            update_post_meta( $attachment_id, '_bnog_sync_skipped', 'file_not_found' );
+            return true;
         }
 
         // Process image if resize option is enabled.
