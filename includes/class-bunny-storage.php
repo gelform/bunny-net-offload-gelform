@@ -46,9 +46,17 @@ class BNOG_Bunny_Storage {
             return new WP_Error( 'file_not_found', __( 'Local file not found or not readable.', 'bunny-net-offload-gelform' ) );
         }
 
-        // Validate file type before upload using WordPress's allowed MIME types.
+        // Validate file type before upload.
         $file_type = wp_check_filetype( $local_path );
-        if ( empty( $file_type['type'] ) || ! $this->is_allowed_file_type( $file_type['type'] ) ) {
+        $mime_type = $file_type['type'];
+
+        // If wp_check_filetype returns empty (e.g., SVGs not in WP allowed list),
+        // use PHP's mime_content_type as fallback for files already in media library.
+        if ( empty( $mime_type ) && function_exists( 'mime_content_type' ) ) {
+            $mime_type = mime_content_type( $local_path );
+        }
+
+        if ( empty( $mime_type ) || ! $this->is_allowed_file_type( $mime_type ) ) {
             return new WP_Error( 'invalid_file_type', __( 'File type is not allowed for CDN upload.', 'bunny-net-offload-gelform' ) );
         }
 
@@ -416,26 +424,7 @@ class BNOG_Bunny_Storage {
      * @return bool True if allowed, false otherwise.
      */
     private function is_allowed_file_type( $mime_type ) {
-        // Get WordPress allowed MIME types (respects upload_mimes filter).
-        $allowed_mimes = get_allowed_mime_types();
-
-        // Check if the MIME type is in WordPress's allowed list.
-        if ( ! in_array( $mime_type, $allowed_mimes, true ) ) {
-            return false;
-        }
-
-        // Check if we should allow all file types or just images.
-        $config   = bunny_net_offload_gelform()->get_config();
-        $sync_all = ! empty( $config['sync_all_files'] );
-
-        if ( ! $sync_all ) {
-            // Only allow image types when sync_all_files is disabled.
-            if ( 0 !== strpos( $mime_type, 'image/' ) ) {
-                return false;
-            }
-        }
-
-        // Always exclude certain types for security.
+        // Always exclude certain types for security (check this first).
         $excluded_types = array(
             'application/x-httpd-php',
             'application/x-php',
@@ -453,6 +442,24 @@ class BNOG_Bunny_Storage {
             return false;
         }
 
-        return true;
+        // Check if we should allow all file types or just images.
+        $config   = bunny_net_offload_gelform()->get_config();
+        $sync_all = ! empty( $config['sync_all_files'] );
+
+        // Allow all image types (including SVGs which may not be in WP's default allowed list).
+        // If a file is already in the media library, WordPress already validated it at upload time.
+        if ( 0 === strpos( $mime_type, 'image/' ) ) {
+            return true;
+        }
+
+        // For non-image types, only allow if sync_all_files is enabled.
+        if ( ! $sync_all ) {
+            return false;
+        }
+
+        // For other file types, check against WordPress allowed MIME types.
+        $allowed_mimes = get_allowed_mime_types();
+
+        return in_array( $mime_type, $allowed_mimes, true );
     }
 }
