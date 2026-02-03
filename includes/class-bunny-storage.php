@@ -46,21 +46,8 @@ class BNOG_Bunny_Storage {
             return new WP_Error( 'file_not_found', __( 'Local file not found or not readable.', 'bunny-net-offload-gelform' ) );
         }
 
-        // Validate file type before upload.
-        $file_type = wp_check_filetype( $local_path );
-        $mime_type = $file_type['type'];
-
-        // If wp_check_filetype returns empty (e.g., SVGs not in WP allowed list),
-        // use PHP's mime_content_type as fallback for files already in media library.
-        if ( empty( $mime_type ) && function_exists( 'mime_content_type' ) ) {
-            $mime_type = mime_content_type( $local_path );
-        }
-
-        if ( empty( $mime_type ) || ! $this->is_allowed_file_type( $mime_type ) ) {
-            return new WP_Error( 'invalid_file_type', __( 'File type is not allowed for CDN upload.', 'bunny-net-offload-gelform' ) );
-        }
-
         // Validate file path is within allowed directories (defense in depth).
+        // File type validation is handled by WordPress at upload time and by the sync queue builder.
         $real_path    = wp_normalize_path( realpath( $local_path ) );
         $upload_dir   = wp_upload_dir();
         $uploads_path = wp_normalize_path( $upload_dir['basedir'] );
@@ -411,55 +398,5 @@ class BNOG_Bunny_Storage {
         $path = ltrim( $path, '/' );
         
         return $path;
-    }
-
-    /**
-     * Check if a MIME type is allowed for CDN upload.
-     *
-     * Uses WordPress's allowed MIME types system, which can be customized
-     * via the 'upload_mimes' filter. When sync_all_files is disabled, only
-     * allows image/* types. When enabled, allows all WordPress-allowed types.
-     *
-     * @param string $mime_type MIME type to check.
-     * @return bool True if allowed, false otherwise.
-     */
-    private function is_allowed_file_type( $mime_type ) {
-        // Always exclude certain types for security (check this first).
-        $excluded_types = array(
-            'application/x-httpd-php',
-            'application/x-php',
-            'text/x-php',
-        );
-
-        /**
-         * Filter the excluded MIME types for CDN upload.
-         *
-         * @param array $excluded_types Array of MIME types to exclude.
-         */
-        $excluded_types = apply_filters( 'bnog_excluded_file_types', $excluded_types );
-
-        if ( in_array( $mime_type, $excluded_types, true ) ) {
-            return false;
-        }
-
-        // Check if we should allow all file types or just images.
-        $config   = bunny_net_offload_gelform()->get_config();
-        $sync_all = ! empty( $config['sync_all_files'] );
-
-        // Allow all image types (including SVGs which may not be in WP's default allowed list).
-        // If a file is already in the media library, WordPress already validated it at upload time.
-        if ( 0 === strpos( $mime_type, 'image/' ) ) {
-            return true;
-        }
-
-        // For non-image types, only allow if sync_all_files is enabled.
-        if ( ! $sync_all ) {
-            return false;
-        }
-
-        // For other file types, check against WordPress allowed MIME types.
-        $allowed_mimes = get_allowed_mime_types();
-
-        return in_array( $mime_type, $allowed_mimes, true );
     }
 }
