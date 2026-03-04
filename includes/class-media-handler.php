@@ -85,9 +85,19 @@ class BNOG_Media_Handler {
             return $upload;
         }
 
-        // Update file path if it changed.
+        // Update file path, URL, and MIME type if they changed (e.g. PNG to JPEG conversion).
         if ( $processed !== $upload['file'] ) {
+            $old_file = $upload['file'];
             $upload['file'] = $processed;
+
+            // If the extension changed, update the URL and MIME type.
+            if ( pathinfo( $old_file, PATHINFO_EXTENSION ) !== pathinfo( $processed, PATHINFO_EXTENSION ) ) {
+                // Use the actual resulting filename (may have -1, -2 suffix if collision occurred).
+                $old_basename   = basename( $old_file );
+                $new_basename   = basename( $processed );
+                $upload['url']  = str_replace( $old_basename, $new_basename, $upload['url'] );
+                $upload['type'] = 'image/jpeg';
+            }
         }
 
         return $upload;
@@ -277,6 +287,10 @@ class BNOG_Media_Handler {
     public function process_queue() {
         $queue = get_option( self::QUEUE_OPTION, array() );
 
+        // Always log queue processing (regardless of WP_DEBUG) for diagnostics.
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        error_log( sprintf( '[Bunny.net Offload] process_queue fired. Queue size: %d', count( $queue ) ) );
+
         if ( empty( $queue ) ) {
             // Clear running status when queue is empty.
             $status = get_option( 'bnog_sync_status', array() );
@@ -287,25 +301,39 @@ class BNOG_Media_Handler {
             return;
         }
 
-        // Get sync status to check resize option.
-        $status             = get_option( 'bnog_sync_status', array() );
+        // Check if sync has been stopped.
+        $status = get_option( 'bnog_sync_status', array() );
+        if ( empty( $status['running'] ) ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log( '[Bunny.net Offload] process_queue: sync not running, skipping.' );
+            return;
+        }
+
         $resize_before_sync = ! empty( $status['resize_before_sync'] );
 
         // Process in batches of 10.
         $batch = array_slice( $queue, 0, 10 );
 
         foreach ( $batch as $attachment_id ) {
+            // Re-check running status each iteration so Stop takes effect mid-batch.
+            $status = get_option( 'bnog_sync_status', array() );
+            if ( empty( $status['running'] ) ) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( '[Bunny.net Offload] process_queue: stopped mid-batch.' );
+                return;
+            }
+
             $result = $this->sync_attachment( $attachment_id, $resize_before_sync );
 
             // Only remove from queue if sync succeeded.
             if ( ! is_wp_error( $result ) ) {
                 $this->remove_from_queue( $attachment_id );
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( sprintf( '[Bunny.net Offload] Synced attachment %d OK.', $attachment_id ) );
             } else {
-                // Log the error and track it in status.
-                bunny_net_offload_gelform()->log(
-                    sprintf( 'Failed to sync attachment %d: %s', $attachment_id, $result->get_error_message() ),
-                    'error'
-                );
+                // Log the error (always, not gated on WP_DEBUG).
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( sprintf( '[Bunny.net Offload] Failed to sync attachment %d: %s', $attachment_id, $result->get_error_message() ) );
 
                 // Move failed item to end of queue to retry later.
                 $this->remove_from_queue( $attachment_id );
@@ -322,6 +350,8 @@ class BNOG_Media_Handler {
                     $status['running'] = false;
                     $status['paused_reason'] = __( 'Sync paused due to too many errors. Check your file types and CDN configuration.', 'bunny-net-offload-gelform' );
                     update_option( 'bnog_sync_status', $status );
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                    error_log( '[Bunny.net Offload] Sync paused: 50+ errors.' );
                     return;
                 }
                 update_option( 'bnog_sync_status', $status );
@@ -334,6 +364,11 @@ class BNOG_Media_Handler {
             $status = get_option( 'bnog_sync_status', array() );
             $status['running'] = false;
             update_option( 'bnog_sync_status', $status );
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log( '[Bunny.net Offload] Queue complete.' );
+        } else {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log( sprintf( '[Bunny.net Offload] Batch done. %d remaining.', count( $remaining_queue ) ) );
         }
     }
 
@@ -523,6 +558,24 @@ class BNOG_Media_Handler {
                 bunny_net_offload_gelform()->log( 'Image processing failed during sync: ' . $processed->get_error_message(), 'warning' );
                 // Continue with original file.
             } else {
+                // If the file path changed (e.g. PNG to JPEG conversion), update WordPress records.
+                if ( $processed !== $main_file ) {
+                    $old_file_basename = basename( $main_file );
+                    $new_file_basename = basename( $processed );
+
+                    update_attached_file( $attachment_id, $processed );
+                    wp_update_post(
+                        array(
+                            'ID'             => $attachment_id,
+                            'post_mime_type' => 'image/jpeg',
+                        )
+                    );
+
+                    // Update references in post content across the database.
+                    $this->update_content_references( $old_file_basename, $new_file_basename );
+
+                    $main_file = $processed;
+                }
                 // Update attachment metadata with new dimensions.
                 $this->update_attachment_dimensions( $attachment_id, $main_file );
             }
@@ -565,14 +618,24 @@ class BNOG_Media_Handler {
                 if ( $resize_before_sync && bunny_net_offload_gelform()->image_processor->is_processable_image( $thumb_file ) ) {
                     $processed = bunny_net_offload_gelform()->image_processor->process( $thumb_file );
 
-                    // Update thumbnail dimensions in metadata if processed.
+                    // Update thumbnail dimensions and path in metadata if processed.
                     if ( ! is_wp_error( $processed ) ) {
+                        // If path changed (PNG to JPEG), update metadata filename and tracking.
+                        if ( $processed !== $thumb_file ) {
+                            $this->update_content_references( basename( $thumb_file ), basename( $processed ) );
+                            $metadata['sizes'][ $size_name ]['file']      = basename( $processed );
+                            $metadata['sizes'][ $size_name ]['mime-type'] = 'image/jpeg';
+                            $thumb_files   = array_diff( $thumb_files, array( $thumb_file ) );
+                            $thumb_files[] = $processed;
+                            $thumb_file    = $processed;
+                        }
+
                         $thumb_size = wp_getimagesize( $thumb_file );
                         if ( $thumb_size ) {
                             $metadata['sizes'][ $size_name ]['width']  = $thumb_size[0];
                             $metadata['sizes'][ $size_name ]['height'] = $thumb_size[1];
-                            $metadata_updated = true;
                         }
+                        $metadata_updated = true;
                     }
                 }
 
@@ -667,6 +730,52 @@ class BNOG_Media_Handler {
             ),
             'info'
         );
+    }
+
+    /**
+     * Update filename references in post content when a file is renamed (e.g. PNG to JPEG).
+     *
+     * Replaces old filename with new filename in post_content across all posts.
+     * Only matches the filename portion to avoid partial URL mismatches.
+     *
+     * @param string $old_basename Old filename (e.g. "image.png").
+     * @param string $new_basename New filename (e.g. "image.jpg").
+     */
+    private function update_content_references( $old_basename, $new_basename ) {
+        if ( $old_basename === $new_basename ) {
+            return;
+        }
+
+        global $wpdb;
+
+        // Update post_content in posts that contain the old filename.
+        // Use a targeted LIKE query to only touch posts that reference this file.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) WHERE post_content LIKE %s",
+                $old_basename,
+                $new_basename,
+                '%' . $wpdb->esc_like( $old_basename ) . '%'
+            )
+        );
+
+        // Also update postmeta values (for page builders that store URLs in meta).
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$wpdb->postmeta} SET meta_value = REPLACE(meta_value, %s, %s) WHERE meta_value LIKE %s AND meta_key NOT LIKE %s",
+                $old_basename,
+                $new_basename,
+                '%' . $wpdb->esc_like( $old_basename ) . '%',
+                '_bnog_%'
+            )
+        );
+
+        if ( $updated ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log( sprintf( '[Bunny.net Offload] Updated %d post(s) referencing %s -> %s', $updated, $old_basename, $new_basename ) );
+        }
     }
 
     /**

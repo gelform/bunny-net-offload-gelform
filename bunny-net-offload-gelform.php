@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants.
-define( 'BNOG_VERSION', '1.0.17' );
+define( 'BNOG_VERSION', '1.0.18' );
 define( 'BNOG_PLUGIN_FILE', __FILE__ );
 define( 'BNOG_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BNOG_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
