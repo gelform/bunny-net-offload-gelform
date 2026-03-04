@@ -31,9 +31,6 @@
             // Setup form
             $('#bnog-setup-form').on('submit', this.handleSetup);
 
-            // Settings form
-            $('#bnog-settings-form').on('submit', this.handleSaveSettings);
-
             // Sync button
             $('#bnog-sync-btn').on('click', this.handleSync);
 
@@ -48,6 +45,9 @@
 
             // Resize and compress files button
             $('#bnog-resize-compress-btn').on('click', this.handleResizeCompress);
+
+            // Stop bulk processing button
+            $('#bnog-stop-bulk-btn').on('click', this.handleStopBulk);
         },
 
         /**
@@ -215,63 +215,6 @@
         },
 
         /**
-         * Handle settings form submission.
-         *
-         * @param {Event} e Submit event.
-         */
-        handleSaveSettings: function(e) {
-            e.preventDefault();
-
-            var $form = $(this);
-            var $btn = $('#bnog-save-btn');
-            var $submitSection = $btn.closest('.submit');
-            var $spinner = $submitSection.find('.spinner');
-            var $message = $submitSection.find('.bnog-status-message');
-
-            $form.addClass('bnog-loading');
-            $btn.prop('disabled', true);
-            $spinner.addClass('is-active');
-            $message.text(bnogAdmin.strings.saving).removeClass('success error');
-
-            $.ajax({
-                url: bnogAdmin.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'bnog_save_settings',
-                    nonce: bnogAdmin.nonce,
-                    max_width: $('#bnog-max-width').val(),
-                    jpeg_quality: $('#bnog-jpeg-quality').val(),
-                    png_compression: $('#bnog-png-compression').val(),
-                    webp_quality: $('#bnog-webp-quality').val(),
-                    keep_local_files: $('#bnog-keep-local').is(':checked') ? 1 : 0,
-                    sync_all_files: $('#bnog-sync-all-files').is(':checked') ? 1 : 0,
-                    custom_cdn_domain: $('#bnog-custom-cdn-domain').val(),
-                    auto_updates: $('#bnog-auto-updates').is(':checked') ? 1 : 0
-                },
-                success: function(response) {
-                    $form.removeClass('bnog-loading');
-                    $spinner.removeClass('is-active');
-                    $btn.prop('disabled', false);
-
-                    if (response.success) {
-                        $message.text(bnogAdmin.strings.saved).addClass('success');
-                        setTimeout(function() {
-                            $message.text('');
-                        }, 3000);
-                    } else {
-                        $message.text(response.data.message || bnogAdmin.strings.error).addClass('error');
-                    }
-                },
-                error: function() {
-                    $form.removeClass('bnog-loading');
-                    $spinner.removeClass('is-active');
-                    $btn.prop('disabled', false);
-                    $message.text(bnogAdmin.strings.error).addClass('error');
-                }
-            });
-        },
-
-        /**
          * Handle sync button click.
          *
          * @param {Event} e Click event.
@@ -418,6 +361,39 @@
          *
          * @param {Event} e Click event.
          */
+        handleStopBulk: function(e) {
+            e.preventDefault();
+
+            if (!confirm(bnogAdmin.strings.confirmStop)) {
+                return;
+            }
+
+            var $btn = $(this);
+            $btn.prop('disabled', true).text(bnogAdmin.strings.stopping);
+
+            $.ajax({
+                url: bnogAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'bnog_cancel_sync',
+                    nonce: bnogAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        window.location.hash = 'bnog-bulk-processing';
+                        window.location.reload();
+                    } else {
+                        alert(response.data.message || bnogAdmin.strings.error);
+                        $btn.prop('disabled', false);
+                    }
+                },
+                error: function() {
+                    alert(bnogAdmin.strings.error);
+                    $btn.prop('disabled', false);
+                }
+            });
+        },
+
         handleResizeCompress: function(e) {
             e.preventDefault();
 

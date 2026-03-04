@@ -153,21 +153,35 @@ class BNOG_Image_Processor {
         // Get MIME type for setting appropriate quality.
         $mime_type = $this->get_mime_type( $file_path );
 
-        // Set quality settings based on image type.
+        // Check if we should convert PNG to JPEG.
+        $convert_png = false;
+        if ( 'image/png' === $mime_type && ! empty( $config['convert_png_to_jpg'] ) ) {
+            if ( ! $this->png_has_transparency( $file_path ) ) {
+                $convert_png = true;
+                $mime_type   = 'image/jpeg';
+            }
+        }
+
+        // Set quality settings based on output type.
         if ( 'image/webp' === $mime_type ) {
             $editor->set_quality( $options['webp_quality'] );
         } else {
             $editor->set_quality( $options['jpeg_quality'] );
         }
 
-        // Generate output filename.
-        $pathinfo    = pathinfo( $file_path );
-        $output_file = $file_path;
-
-        // If we need to save to a new file (for modified images).
-        if ( $needs_resize ) {
-            // Save over the original file.
-            $saved = $editor->save( $file_path, $mime_type );
+        // Save if resized or converting format.
+        if ( $needs_resize || $convert_png ) {
+            if ( $convert_png ) {
+                // Save as JPEG with unique filename (avoid collisions).
+                $dir      = dirname( $file_path );
+                $basename = pathinfo( $file_path, PATHINFO_FILENAME ) . '.jpg';
+                $unique   = wp_unique_filename( $dir, $basename );
+                $new_file_path = $dir . '/' . $unique;
+                $saved         = $editor->save( $new_file_path, 'image/jpeg' );
+            } else {
+                // Save over the original file.
+                $saved = $editor->save( $file_path, $mime_type );
+            }
 
             if ( is_wp_error( $saved ) ) {
                 bunny_net_offload_gelform()->log( 'Failed to save processed image: ' . $saved->get_error_message(), 'error' );
@@ -176,10 +190,76 @@ class BNOG_Image_Processor {
 
             $output_file = $saved['path'];
 
-            bunny_net_offload_gelform()->log( sprintf( 'Image processed and saved: %s', $output_file ), 'info' );
+            // If we converted PNG to JPEG, delete the original PNG.
+            if ( $convert_png && file_exists( $file_path ) && $output_file !== $file_path ) {
+                wp_delete_file( $file_path );
+                bunny_net_offload_gelform()->log( sprintf( 'Converted PNG to JPEG: %s -> %s', $file_path, $output_file ), 'info' );
+            } else {
+                bunny_net_offload_gelform()->log( sprintf( 'Image processed and saved: %s', $output_file ), 'info' );
+            }
+
+            return $output_file;
         }
 
-        return $output_file;
+        return $file_path;
+    }
+
+    /**
+     * Check if a PNG image has transparency (alpha channel with non-opaque pixels).
+     *
+     * @param string $file_path Path to the PNG file.
+     * @return bool True if the image has transparent pixels.
+     */
+    public function png_has_transparency( $file_path ) {
+        // Quick check: if the PNG doesn't have an alpha channel in its header, it's not transparent.
+        // PNG color type is at byte offset 25. Type 4 = greyscale+alpha, type 6 = RGBA.
+        $header = file_get_contents( $file_path, false, null, 0, 26 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+        if ( false === $header || strlen( $header ) < 26 ) {
+            return true; // Assume transparency if we can't read header (safe default).
+        }
+
+        $color_type = ord( $header[25] );
+
+        // Color types without alpha: 0 (greyscale), 2 (RGB), 3 (palette).
+        if ( 0 === $color_type || 2 === $color_type ) {
+            return false;
+        }
+
+        // For palette-based PNGs (type 3), check for tRNS chunk.
+        if ( 3 === $color_type ) {
+            $contents = file_get_contents( $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+            return false !== $contents && false !== strpos( $contents, 'tRNS' );
+        }
+
+        // Types 4 and 6 have alpha — sample pixels to check if any are actually non-opaque.
+        $image = @imagecreatefrompng( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+
+        if ( ! $image ) {
+            return true; // Assume transparency if we can't load (safe default).
+        }
+
+        $width  = imagesx( $image );
+        $height = imagesy( $image );
+
+        // Sample pixels rather than checking every one (performance).
+        $step = max( 1, intval( sqrt( $width * $height / 1000 ) ) );
+
+        for ( $x = 0; $x < $width; $x += $step ) {
+            for ( $y = 0; $y < $height; $y += $step ) {
+                $rgba  = imagecolorat( $image, $x, $y );
+                $alpha = ( $rgba >> 24 ) & 0x7F;
+
+                if ( $alpha > 0 ) {
+                    imagedestroy( $image );
+                    return true;
+                }
+            }
+        }
+
+        imagedestroy( $image );
+        return false;
     }
 
     /**

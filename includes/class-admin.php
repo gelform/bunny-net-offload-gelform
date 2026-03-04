@@ -34,11 +34,11 @@ class BNOG_Admin {
         add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
         add_action( 'admin_init', array( $this, 'handle_auth_redirect' ) );
+        add_action( 'admin_init', array( $this, 'handle_save_settings' ) );
         add_action( 'admin_notices', array( $this, 'display_notices' ) );
 
         // AJAX handlers.
         add_action( 'wp_ajax_bnog_setup_cdn', array( $this, 'ajax_setup_cdn' ) );
-        add_action( 'wp_ajax_bnog_save_settings', array( $this, 'ajax_save_settings' ) );
         add_action( 'wp_ajax_bnog_purge_cache', array( $this, 'ajax_purge_cache' ) );
         add_action( 'wp_ajax_bnog_delete_local_files', array( $this, 'ajax_delete_local_files' ) );
         add_action( 'wp_ajax_bnog_resize_compress_files', array( $this, 'ajax_resize_compress_files' ) );
@@ -93,8 +93,6 @@ class BNOG_Admin {
                     'settingUp'              => __( 'Setting up CDN...', 'bunny-net-offload-gelform' ),
                     'success'                => __( 'Success!', 'bunny-net-offload-gelform' ),
                     'error'                  => __( 'Error', 'bunny-net-offload-gelform' ),
-                    'saving'                 => __( 'Saving...', 'bunny-net-offload-gelform' ),
-                    'saved'                  => __( 'Settings saved!', 'bunny-net-offload-gelform' ),
                     'syncing'                => __( 'Syncing in progress...', 'bunny-net-offload-gelform' ),
                     'syncComplete'           => __( 'Sync complete!', 'bunny-net-offload-gelform' ),
                     'syncBackground'         => __( 'Syncing is running in the background. You can leave this page and come back later.', 'bunny-net-offload-gelform' ),
@@ -106,6 +104,9 @@ class BNOG_Admin {
                     'deleteLocalQueued'      => __( 'Local file deletion started. The page will refresh.', 'bunny-net-offload-gelform' ),
                     'resizingCompressing'    => __( 'Queuing files for processing...', 'bunny-net-offload-gelform' ),
                     'resizeCompressQueued'   => __( 'Processing started. The page will refresh.', 'bunny-net-offload-gelform' ),
+                    'confirmStop'            => __( 'Are you sure you want to stop processing? Items already processed will not be reverted.', 'bunny-net-offload-gelform' ),
+                    'stopping'               => __( 'Stopping...', 'bunny-net-offload-gelform' ),
+                    'stopped'                => __( 'Processing stopped.', 'bunny-net-offload-gelform' ),
                 ),
             )
         );
@@ -150,6 +151,14 @@ class BNOG_Admin {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         if ( ! isset( $_GET['page'] ) || self::PAGE_SLUG !== $_GET['page'] ) {
             return;
+        }
+
+        // Show settings saved notice.
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if ( isset( $_GET['settings-updated'] ) && 'true' === $_GET['settings-updated'] ) {
+            echo '<div class="notice notice-success is-dismissible"><p>';
+            esc_html_e( 'Settings saved.', 'bunny-net-offload-gelform' );
+            echo '</p></div>';
         }
 
         // Show success notice from transient.
@@ -496,7 +505,9 @@ class BNOG_Admin {
             <!-- Advanced Tab -->
             <div class="bnog-tab-content" id="bnog-tab-advanced">
                 <div class="bnog-card-body">
-                    <form id="bnog-settings-form">
+                    <form id="bnog-settings-form" method="post" action="">
+                        <?php wp_nonce_field( 'bnog_save_settings', 'bnog_settings_nonce' ); ?>
+                        <input type="hidden" name="bnog_action" value="save_settings">
                         <h3><?php esc_html_e( 'Image Dimensions', 'bunny-net-offload-gelform' ); ?></h3>
 
                         <table class="form-table">
@@ -566,6 +577,21 @@ class BNOG_Admin {
                                     </span>
                                     <p class="description">
                                         <?php esc_html_e( 'Quality for WebP conversion. WebP typically achieves similar quality at lower values than JPEG.', 'bunny-net-offload-gelform' ); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="bnog-convert-png-to-jpg"><?php esc_html_e( 'Convert PNG to JPEG', 'bunny-net-offload-gelform' ); ?></label>
+                                </th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="convert_png_to_jpg" id="bnog-convert-png-to-jpg" value="1"
+                                            <?php checked( ! empty( $config['convert_png_to_jpg'] ) ); ?>>
+                                        <?php esc_html_e( 'Convert non-transparent PNG images to JPEG for smaller file sizes', 'bunny-net-offload-gelform' ); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e( 'PNGs without transparency will be converted to JPEG using the quality setting above. Applies to new uploads and bulk image processing.', 'bunny-net-offload-gelform' ); ?>
                                     </p>
                                 </td>
                             </tr>
@@ -699,14 +725,12 @@ class BNOG_Admin {
                             <button type="submit" class="button button-primary" id="bnog-save-btn">
                                 <?php esc_html_e( 'Save Settings', 'bunny-net-offload-gelform' ); ?>
                             </button>
-                            <span class="spinner"></span>
-                            <span class="bnog-status-message"></span>
                         </p>
 
                         <?php if ( ! empty( $config['keep_local_files'] ) ) : ?>
                             <hr class="bnog-divider">
 
-                            <h3><?php esc_html_e( 'Bulk Image Processing', 'bunny-net-offload-gelform' ); ?></h3>
+                            <h3 id="bnog-bulk-processing"><?php esc_html_e( 'Bulk Image Processing', 'bunny-net-offload-gelform' ); ?></h3>
 
                             <div class="bnog-resize-compress-section">
                                 <?php if ( $is_bulk_processing ) : ?>
@@ -721,10 +745,14 @@ class BNOG_Admin {
                                             );
                                             ?>
                                         </span>
-                                        <a href="<?php echo esc_url( add_query_arg( array() ) ); ?>" class="button button-small bnog-refresh-btn">
+                                        <a href="<?php echo esc_url( add_query_arg( array() ) . '#bnog-bulk-processing' ); ?>" class="button button-small bnog-refresh-btn">
                                             <span class="dashicons dashicons-update"></span>
                                             <?php esc_html_e( 'Refresh', 'bunny-net-offload-gelform' ); ?>
                                         </a>
+                                        <button type="button" class="button button-small bnog-stop-bulk-btn" id="bnog-stop-bulk-btn" style="color: #b32d2e; border-color: #b32d2e;">
+                                            <span class="dashicons dashicons-no" style="margin-top: 3px;"></span>
+                                            <?php esc_html_e( 'Stop', 'bunny-net-offload-gelform' ); ?>
+                                        </button>
                                     </div>
                                 <?php else : ?>
                                     <button type="button" class="button" id="bnog-resize-compress-btn">
@@ -837,16 +865,19 @@ class BNOG_Admin {
     }
 
     /**
-     * AJAX handler for saving settings.
+     * Handle settings form POST submission.
      */
-    public function ajax_save_settings() {
-        // Verify nonce with proper JSON error response.
-        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bnog_admin_nonce' ) ) {
-            wp_send_json_error( array( 'message' => __( 'Security check failed. Please refresh the page and try again.', 'bunny-net-offload-gelform' ) ) );
+    public function handle_save_settings() {
+        if ( ! isset( $_POST['bnog_action'] ) || 'save_settings' !== $_POST['bnog_action'] ) {
+            return;
+        }
+
+        if ( ! isset( $_POST['bnog_settings_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['bnog_settings_nonce'] ) ), 'bnog_save_settings' ) ) {
+            wp_die( esc_html__( 'Security check failed. Please go back and try again.', 'bunny-net-offload-gelform' ) );
         }
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'bunny-net-offload-gelform' ) ) );
+            wp_die( esc_html__( 'Permission denied.', 'bunny-net-offload-gelform' ) );
         }
 
         $config = bunny_net_offload_gelform()->get_config();
@@ -863,14 +894,15 @@ class BNOG_Admin {
         $png_compression = max( 0, min( 9, $png_compression ) );
         $webp_quality    = max( 1, min( 100, $webp_quality ) );
 
-        $config['max_width']        = $max_width;
-        $config['max_height']       = $max_width;
-        $config['jpeg_quality']     = $jpeg_quality;
-        $config['png_compression']  = $png_compression;
-        $config['webp_quality']     = $webp_quality;
-        $config['keep_local_files'] = ! empty( $_POST['keep_local_files'] );
-        $config['sync_all_files']   = ! empty( $_POST['sync_all_files'] );
-        $config['auto_updates']     = ! empty( $_POST['auto_updates'] );
+        $config['max_width']          = $max_width;
+        $config['max_height']         = $max_width;
+        $config['jpeg_quality']       = $jpeg_quality;
+        $config['png_compression']    = $png_compression;
+        $config['webp_quality']       = $webp_quality;
+        $config['keep_local_files']   = ! empty( $_POST['keep_local_files'] );
+        $config['sync_all_files']     = ! empty( $_POST['sync_all_files'] );
+        $config['convert_png_to_jpg'] = ! empty( $_POST['convert_png_to_jpg'] );
+        $config['auto_updates']       = ! empty( $_POST['auto_updates'] );
 
         // Sanitize and validate custom CDN domain.
         $custom_cdn_domain = isset( $_POST['custom_cdn_domain'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_cdn_domain'] ) ) : '';
@@ -885,7 +917,6 @@ class BNOG_Admin {
         $custom_cdn_domain = trim( rtrim( $custom_cdn_domain, '/' ) );
 
         // Validate that it looks like a valid hostname (alphanumeric, dots, hyphens only).
-        // Clear the value if it doesn't match a valid hostname pattern.
         if ( ! empty( $custom_cdn_domain ) && ! preg_match( '/^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/', $custom_cdn_domain ) ) {
             $custom_cdn_domain = '';
         }
@@ -897,7 +928,9 @@ class BNOG_Admin {
         // Clear URL availability cache when custom domain changes.
         bunny_net_offload_gelform()->url_rewriter->clear_availability_cache();
 
-        wp_send_json_success( array( 'message' => __( 'Settings saved!', 'bunny-net-offload-gelform' ) ) );
+        // Redirect back to the Advanced tab with success message.
+        wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=advanced&settings-updated=true' ) );
+        exit;
     }
 
     /**
