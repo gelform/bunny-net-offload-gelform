@@ -10,6 +10,11 @@ Located in `tests/` directory. Requires WordPress test suite.
 
 ```bash
 # Install WordPress test suite (run once)
+# Download the installer script if not present:
+mkdir -p tests/bin
+curl -o tests/bin/install-wp-tests.sh https://develop.svn.wordpress.org/trunk/tests/phpunit/includes/install.sh
+chmod +x tests/bin/install-wp-tests.sh
+
 bash tests/bin/install-wp-tests.sh wordpress_test root '' localhost latest
 
 # Run all tests

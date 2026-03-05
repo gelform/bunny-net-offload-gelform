@@ -16,7 +16,7 @@ class BNOG_Test_Media_Handler extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		$this->handler = bunny_net_offload_gelform()->media;
+		$this->handler = bunny_net_offload_gelform()->media_handler;
 	}
 
 	/**

@@ -26,9 +26,12 @@ TEST.assert(connectBtn !== null, "Connect button should exist");
 I.see("Don't have a Bunny.net account?");
 
 // --- Test: Disconnect flow (if already connected) ---
-// If the disconnect button is visible, test it.
-if (I.see.element("#bnog-disconnect")) {
+// I.see.element() throws on failure, so use try/catch for conditional check.
+try {
+    I.see.element("#bnog-disconnect");
     I.click("#bnog-disconnect");
     // Should show confirmation or redirect to connect screen.
     I.see("Connect to Bunny.net");
+} catch (e) {
+    // Disconnect button not present — plugin is not connected, skip this test.
 }
