@@ -287,9 +287,10 @@ class BNOG_Media_Handler {
     public function process_queue() {
         $queue = get_option( self::QUEUE_OPTION, array() );
 
-        // Always log queue processing (regardless of WP_DEBUG) for diagnostics.
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-        error_log( sprintf( '[Bunny.net Offload] process_queue fired. Queue size: %d', count( $queue ) ) );
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log( sprintf( '[Bunny.net Offload] process_queue fired. Queue size: %d', count( $queue ) ) );
+        }
 
         if ( empty( $queue ) ) {
             // Clear running status when queue is empty.
@@ -304,8 +305,10 @@ class BNOG_Media_Handler {
         // Check if sync has been stopped.
         $status = get_option( 'bnog_sync_status', array() );
         if ( empty( $status['running'] ) ) {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( '[Bunny.net Offload] process_queue: sync not running, skipping.' );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( '[Bunny.net Offload] process_queue: sync not running, skipping.' );
+            }
             return;
         }
 
@@ -318,8 +321,10 @@ class BNOG_Media_Handler {
             // Re-check running status each iteration so Stop takes effect mid-batch.
             $status = get_option( 'bnog_sync_status', array() );
             if ( empty( $status['running'] ) ) {
-                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log( '[Bunny.net Offload] process_queue: stopped mid-batch.' );
+                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                    error_log( '[Bunny.net Offload] process_queue: stopped mid-batch.' );
+                }
                 return;
             }
 
@@ -328,8 +333,10 @@ class BNOG_Media_Handler {
             // Only remove from queue if sync succeeded.
             if ( ! is_wp_error( $result ) ) {
                 $this->remove_from_queue( $attachment_id );
-                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log( sprintf( '[Bunny.net Offload] Synced attachment %d OK.', $attachment_id ) );
+                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                    error_log( sprintf( '[Bunny.net Offload] Synced attachment %d OK.', $attachment_id ) );
+                }
             } else {
                 // Log the error (always, not gated on WP_DEBUG).
                 // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -571,6 +578,14 @@ class BNOG_Media_Handler {
                         )
                     );
 
+                    // Update the `file` field in attachment metadata so srcset and
+                    // other core functions reference the new filename.
+                    $metadata = wp_get_attachment_metadata( $attachment_id );
+                    if ( is_array( $metadata ) && ! empty( $metadata['file'] ) ) {
+                        $metadata['file'] = str_replace( $old_file_basename, $new_file_basename, $metadata['file'] );
+                        wp_update_attachment_metadata( $attachment_id, $metadata );
+                    }
+
                     // Update references in post content across the database.
                     $this->update_content_references( $old_file_basename, $new_file_basename );
 
@@ -760,19 +775,50 @@ class BNOG_Media_Handler {
             )
         );
 
-        // Also update postmeta values (for page builders that store URLs in meta).
+        // Update postmeta values safely — avoid SQL REPLACE() on serialized data
+        // which would corrupt serialization string lengths.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->query(
+        $meta_rows = $wpdb->get_results(
             $wpdb->prepare(
-                "UPDATE {$wpdb->postmeta} SET meta_value = REPLACE(meta_value, %s, %s) WHERE meta_value LIKE %s AND meta_key NOT LIKE %s",
-                $old_basename,
-                $new_basename,
+                "SELECT meta_id, meta_value FROM {$wpdb->postmeta} WHERE meta_value LIKE %s AND meta_key NOT LIKE %s",
                 '%' . $wpdb->esc_like( $old_basename ) . '%',
                 '_bnog_%'
-            )
+            ),
+            ARRAY_A
         );
 
-        if ( $updated ) {
+        if ( ! empty( $meta_rows ) ) {
+            foreach ( $meta_rows as $meta_row ) {
+                $meta_id      = isset( $meta_row['meta_id'] ) ? (int) $meta_row['meta_id'] : 0;
+                $raw_value    = isset( $meta_row['meta_value'] ) ? $meta_row['meta_value'] : '';
+                $unserialized = maybe_unserialize( $raw_value );
+
+                // Skip complex structures (arrays/objects) to avoid corrupting serialized data.
+                if ( is_array( $unserialized ) || is_object( $unserialized ) ) {
+                    continue;
+                }
+
+                $original_string = (string) $unserialized;
+                $updated_string  = str_replace( $old_basename, $new_basename, $original_string );
+
+                if ( $updated_string === $original_string ) {
+                    continue;
+                }
+
+                $final_value = maybe_serialize( $updated_string );
+
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+                $wpdb->update(
+                    $wpdb->postmeta,
+                    array( 'meta_value' => $final_value ),
+                    array( 'meta_id' => $meta_id ),
+                    array( '%s' ),
+                    array( '%d' )
+                );
+            }
+        }
+
+        if ( $updated && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             error_log( sprintf( '[Bunny.net Offload] Updated %d post(s) referencing %s -> %s', $updated, $old_basename, $new_basename ) );
         }

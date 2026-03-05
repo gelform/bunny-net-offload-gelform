@@ -226,11 +226,45 @@ class BNOG_Image_Processor {
             return false;
         }
 
-        // For palette-based PNGs (type 3), check for tRNS chunk.
+        // For palette-based PNGs (type 3), scan PNG chunks for tRNS without loading full file.
         if ( 3 === $color_type ) {
-            $contents = file_get_contents( $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+            $handle = fopen( $file_path, 'rb' );
+            if ( ! $handle ) {
+                return true; // Assume transparency if we can't read (safe default).
+            }
 
-            return false !== $contents && false !== strpos( $contents, 'tRNS' );
+            // Skip the 8-byte PNG signature.
+            fseek( $handle, 8 );
+            $found_trns = false;
+
+            // Read chunks: each has 4-byte length + 4-byte type + data + 4-byte CRC.
+            // phpcs:ignore WordPress.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
+            while ( ! feof( $handle ) ) {
+                $chunk_header = fread( $handle, 8 );
+                if ( false === $chunk_header || strlen( $chunk_header ) < 8 ) {
+                    break;
+                }
+
+                $chunk_data = unpack( 'Nlength/a4type', $chunk_header );
+                $chunk_type = $chunk_data['type'];
+
+                if ( 'tRNS' === $chunk_type ) {
+                    $found_trns = true;
+                    break;
+                }
+
+                if ( 'IEND' === $chunk_type ) {
+                    break;
+                }
+
+                // Skip chunk data + 4-byte CRC.
+                fseek( $handle, $chunk_data['length'] + 4, SEEK_CUR );
+            }
+
+            fclose( $handle );
+
+            return $found_trns;
         }
 
         // Types 4 and 6 have alpha — sample pixels to check if any are actually non-opaque.

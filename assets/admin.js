@@ -369,7 +369,9 @@
             }
 
             var $btn = $(this);
-            $btn.prop('disabled', true).text(bnogAdmin.strings.stopping);
+            var $icon = $btn.find('.dashicons').first();
+            var iconHtml = $icon.length ? $icon.prop('outerHTML') + ' ' : '';
+            $btn.prop('disabled', true).html(iconHtml + bnogAdmin.strings.stopping);
 
             $.ajax({
                 url: bnogAdmin.ajaxUrl,
