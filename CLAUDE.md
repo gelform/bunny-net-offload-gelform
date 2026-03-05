@@ -9,10 +9,12 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 - `bunny-net-offload-gelform.php` - Main plugin file, version constants
 - `includes/class-admin.php` - Admin UI, settings page, AJAX handlers
 - `includes/class-media-handler.php` - Sync queue, attachment processing
+- `includes/class-image-processor.php` - Resize/compress, PNG-to-JPEG conversion, transparency detection
 - `includes/class-bunny-storage.php` - CDN upload/download operations
 - `includes/class-github-updater.php` - GitHub-based plugin updates
 - `includes/class-url-rewriter.php` - Rewrites media URLs to CDN
 - `assets/admin.js` - Admin JavaScript for settings UI
+- `tests/` - PHPUnit tests and UIlicious E2E tests
 
 ### Settings Storage
 - Plugin config stored in `bnog_config` option
@@ -24,7 +26,21 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 - `keep_local_files` - Whether to keep files locally after CDN upload
 - `auto_updates` - Custom auto-update toggle (WordPress native doesn't work for GitHub plugins)
 
-## Recent Changes (v1.0.12 - v1.0.17)
+## Testing
+
+- **PHPUnit tests**: `tests/test-*.php` — run with `phpunit` from plugin root
+- **UIlicious E2E tests**: `tests/uilicious/*.test.js` — run via UIlicious dashboard
+- **Testing guide**: See `TESTING.md` for setup, manual checklists, and CI info
+
+## Recent Changes (v1.0.12 - v1.0.18)
+
+### v1.0.18 - PNG-to-JPEG conversion, Copilot review fixes
+- PNG-to-JPEG conversion for non-transparent PNGs (uses chunk-stream tRNS detection)
+- Safe postmeta updates — PHP-based `maybe_unserialize()`/`maybe_serialize()` instead of SQL `REPLACE()`
+- Attachment metadata `file` field updated during PNG-to-JPEG conversion (fixes srcset)
+- Informational `error_log()` calls gated behind `WP_DEBUG`
+- Stop button preserves Dashicon icon (`.html()` instead of `.text()`)
+- Added PHPUnit test infrastructure and UIlicious E2E tests
 
 ### v1.0.17 - Simplify file type validation
 - Removed redundant file type validation from `upload()` function

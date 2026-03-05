@@ -3,7 +3,7 @@
  * Plugin Name: Bunny.net Offload by Gelform
  * Plugin URI: https://github.com/gelform/bunny-net-offload-gelform
  * Description: Dead-simple image optimization and CDN offloading using Bunny.net with OAuth-style authorization.
- * Version: 1.0.17
+ * Version: 1.0.18
  * Author: Gelform
  * Author URI: https://gelform.com
  * License: GPL v2 or later

@@ -32,6 +32,12 @@ jobs:
                     --exclude='node_modules' \
                     --exclude='*.log' \
                     --exclude='.DS_Store' \
+                    --exclude='tests' \
+                    --exclude='phpunit.xml' \
+                    --exclude='TESTING.md' \
+                    --exclude='CODE_REVIEW.md' \
+                    --exclude='REVIEW_SUMMARY.md' \
+                    --exclude='CLAUDE.md' \
                     ./ build/bunny-net-offload-gelform/
 
           # Create the zip file

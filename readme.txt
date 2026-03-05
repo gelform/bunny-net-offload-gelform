@@ -2,9 +2,9 @@
 Contributors: gelform
 Tags: cdn, bunny, image optimization, performance, offload
 Requires at least: 5.8
-Tested up to: 6.4
+Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.0.18
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,6 +79,57 @@ Yes! You can configure a custom CDN domain in the Advanced settings tab. First s
 
 == Changelog ==
 
+= 1.0.18 =
+* PNG-to-JPEG conversion for non-transparent PNGs to reduce file size
+* Efficient PNG transparency detection via chunk-stream scanning
+* Settings postback — settings persist after save without page refresh quirks
+* Bulk processing improvements — better stop button UX, safer queue processing
+* Fix serialized meta corruption — safe PHP-based updates instead of SQL REPLACE on postmeta
+* Update attachment metadata `file` field during PNG-to-JPEG conversion for correct srcset
+* Gate informational logs behind WP_DEBUG to prevent log flooding in production
+
+= 1.0.17 =
+* Simplify file type validation — trust WordPress mime type detection
+* Fix SVG files not syncing to CDN
+
+= 1.0.16 =
+* Fix perpetual "1 waiting to sync" for missing/deleted files
+* Skip missing files during sync instead of retrying indefinitely
+
+= 1.0.15 =
+* Persist tab selection in URL for better navigation UX
+
+= 1.0.14 =
+* Fix auto_updates setting not being saved
+
+= 1.0.13 =
+* Add auto-updates toggle in plugin settings
+
+= 1.0.12 =
+* Fix auto-update UI by populating no_update transient
+
+= 1.0.11 =
+* Add auto-update support for GitHub-hosted plugin
+
+= 1.0.10 =
+* Add GitHub Actions workflow for properly named release zips
+
+= 1.0.9 =
+* GitHub-based automatic plugin updates with version checking
+
+= 1.0.8 =
+* Use CSS classes instead of inline styles for bulk processing UI
+* Fix Bulk Image Processing to show running state and update status text
+
+= 1.0.7 =
+* Move Save Settings above Cache section, add Resize and Compress button
+* Add delete local files feature and customizable storage name
+
+= 1.0.6 =
+* Defense-in-depth security improvements from code review
+* Improved sync UX, fix local file deletion, better AJAX error handling
+* Tabbed interface, compression settings, sync-in-progress detection
+
 = 1.0.5 =
 * Storage zone names now include site domain prefix for easier identification (e.g., wp-bass-abc123)
 * Add refresh button to sync progress screen
@@ -113,6 +164,21 @@ Yes! You can configure a custom CDN domain in the Advanced settings tab. First s
 * Admin dashboard for settings management
 
 == Upgrade Notice ==
+
+= 1.0.18 =
+PNG-to-JPEG conversion, safer meta updates, and production logging improvements.
+
+= 1.0.17 =
+Simplified file validation and SVG sync fix.
+
+= 1.0.9 =
+Adds automatic plugin updates from GitHub releases.
+
+= 1.0.7 =
+New delete local files feature and UI improvements.
+
+= 1.0.6 =
+Security improvements and tabbed admin interface.
 
 = 1.0.4 =
 UI improvements and better Bunny.net dashboard integration.
