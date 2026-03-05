@@ -32,7 +32,7 @@ phpunit --filter test_png_transparency_detection_opaque
 
 | File | Class | What It Tests |
 |---|---|---|
-| `tests/test-image-processor.php` | `BNOG_Test_Image_Processor` | PNG transparency detection, file size limits, MIME type detection |
+| `tests/test-image-processor.php` | `BNOG_Test_Image_Processor` | PNG transparency detection, image processing errors, MIME type detection |
 | `tests/test-media-handler.php` | `BNOG_Test_Media_Handler` | Queue management, content reference updates, metadata updates |
 | `tests/test-url-rewriter.php` | `BNOG_Test_URL_Rewriter` | CDN URL rewriting, Beaver Builder exclusions, srcset support |
 
