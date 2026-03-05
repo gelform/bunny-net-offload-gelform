@@ -79,8 +79,16 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 4. Cron job `bnog_process_queue` processes in batches of 10
 5. Each attachment: upload to Bunny CDN, set `_bnog_synced` meta
 
-## GitHub Updater
-- Checks `https://api.github.com/repos/gelform/bunny-net-offload-gelform/releases/latest`
-- Compares `tag_name` (e.g., "v1.0.17") with current version
-- Downloads zip from release assets
-- Repository must be public for API access
+## Release Process
+
+1. Bump version in `bunny-net-offload-gelform.php` — both `Version:` header (line 6) and `BNOG_VERSION` constant (line 26)
+2. Commit and push to `main`
+3. Tag with `v` prefix: `git tag v1.0.XX && git push origin v1.0.XX`
+4. GitHub Actions (`.github/workflows/release.yml`) automatically:
+   - Creates a zip excluding dev files (tests, CLAUDE.md, phpunit.xml, TESTING.md, etc.)
+   - Publishes as a GitHub Release with auto-generated release notes
+5. WordPress sites with the plugin installed pick up the update via `BNOG_GitHub_Updater`:
+   - Checks GitHub API every 12 hours for new releases
+   - Compares `tag_name` against `BNOG_VERSION`
+   - If `auto_updates` is enabled in plugin settings, updates automatically
+   - Otherwise shows in WP Dashboard → Updates
