@@ -30,8 +30,19 @@ I.click("#bnog-sync-btn");
 I.wait(2);
 
 // Should show progress or sync-in-progress state.
-// Check for running indicator.
-var hasSyncRunning = I.see.element(".bnog-sync-in-progress") || I.see("Syncing");
+// Check for running indicator (I.see.element throws on failure, not returns boolean).
+var hasSyncRunning = false;
+try {
+    I.see.element(".bnog-sync-in-progress");
+    hasSyncRunning = true;
+} catch (e) {
+    try {
+        I.see("Syncing");
+        hasSyncRunning = true;
+    } catch (e2) {
+        hasSyncRunning = false;
+    }
+}
 TEST.assert(hasSyncRunning, "Sync should start and show progress");
 
 // --- Test: Stop button appears during sync ---

@@ -159,13 +159,9 @@ class BNOG_Test_Image_Processor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test file size limit is enforced.
+	 * Test that processing a non-existent file returns an error.
 	 */
-	public function test_process_rejects_oversized_file() {
-		$file = $this->create_test_jpeg();
-
-		// Mock a large file by temporarily changing the check.
-		// Since we can't create a 50MB+ file in tests, we test the error code.
+	public function test_process_rejects_nonexistent_file() {
 		$result = $this->processor->process( '/nonexistent/file.jpg' );
 
 		$this->assertWPError( $result );
