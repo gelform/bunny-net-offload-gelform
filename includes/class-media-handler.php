@@ -285,11 +285,15 @@ class BNOG_Media_Handler {
      * Process upload queue (cron job).
      */
     public function process_queue() {
-        $queue = get_option( self::QUEUE_OPTION, array() );
+        // Use REQUEST_TIME_FLOAT when available so the budget accounts for time
+        // already spent in WP bootstrap before this callback ran.
+        $start_time  = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime( true );
+        $time_budget = $this->get_time_budget();
+        $queue       = get_option( self::QUEUE_OPTION, array() );
 
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( sprintf( '[Bunny.net Offload] process_queue fired. Queue size: %d', count( $queue ) ) );
+            error_log( sprintf( '[Bunny.net Offload] process_queue fired. Queue size: %d, time budget: %.1fs.', count( $queue ), $time_budget ) );
         }
 
         if ( empty( $queue ) ) {
@@ -313,70 +317,108 @@ class BNOG_Media_Handler {
         }
 
         $resize_before_sync = ! empty( $status['resize_before_sync'] );
+        $batches_run        = 0;
 
-        // Process in batches of 10.
-        $batch = array_slice( $queue, 0, 10 );
+        // Run batches back-to-back until queue empty, sync stopped, or time budget exhausted.
+        // This auto-throttles for slow servers and uses the full cron tick on fast ones.
+        do {
+            // Refresh queue for this batch.
+            $queue = get_option( self::QUEUE_OPTION, array() );
+            if ( empty( $queue ) ) {
+                break;
+            }
 
-        foreach ( $batch as $attachment_id ) {
-            // Re-check running status each iteration so Stop takes effect mid-batch.
-            $status = get_option( 'bnog_sync_status', array() );
-            if ( empty( $status['running'] ) ) {
-                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                    error_log( '[Bunny.net Offload] process_queue: stopped mid-batch.' );
+            $batch = array_slice( $queue, 0, 10 );
+
+            foreach ( $batch as $attachment_id ) {
+                // Re-check running status each iteration so Stop takes effect mid-batch.
+                $status = get_option( 'bnog_sync_status', array() );
+                if ( empty( $status['running'] ) ) {
+                    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                        error_log( '[Bunny.net Offload] process_queue: stopped mid-batch.' );
+                    }
+                    return;
                 }
+
+                $result = $this->sync_attachment( $attachment_id, $resize_before_sync );
+
+                // Only remove from queue if sync succeeded.
+                if ( ! is_wp_error( $result ) ) {
+                    $this->remove_from_queue( $attachment_id );
+                    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                        error_log( sprintf( '[Bunny.net Offload] Synced attachment %d OK.', $attachment_id ) );
+                    }
+                } else {
+                    // Log the error (always, not gated on WP_DEBUG).
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                    error_log( sprintf( '[Bunny.net Offload] Failed to sync attachment %d: %s', $attachment_id, $result->get_error_message() ) );
+
+                    // Move failed item to end of queue to retry later.
+                    $this->remove_from_queue( $attachment_id );
+                    $current_queue   = get_option( self::QUEUE_OPTION, array() );
+                    $current_queue[] = $attachment_id;
+                    update_option( self::QUEUE_OPTION, array_unique( $current_queue ) );
+
+                    // Track error count.
+                    $status           = get_option( 'bnog_sync_status', array() );
+                    $status['errors'] = isset( $status['errors'] ) ? $status['errors'] + 1 : 1;
+
+                    // If we've had too many consecutive errors, pause sync.
+                    if ( $status['errors'] >= 50 ) {
+                        $status['running']       = false;
+                        $status['paused_reason'] = __( 'Sync paused due to too many errors. Check your file types and CDN configuration.', 'bunny-net-offload-gelform' );
+                        update_option( 'bnog_sync_status', $status );
+                        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                        error_log( '[Bunny.net Offload] Sync paused: 50+ errors.' );
+                        return;
+                    }
+                    update_option( 'bnog_sync_status', $status );
+                }
+            }
+
+            ++$batches_run;
+            $elapsed         = microtime( true ) - $start_time;
+            $remaining_queue = get_option( self::QUEUE_OPTION, array() );
+
+            if ( empty( $remaining_queue ) ) {
+                $status            = get_option( 'bnog_sync_status', array() );
+                $status['running'] = false;
+                update_option( 'bnog_sync_status', $status );
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log( sprintf( '[Bunny.net Offload] Queue complete. Ran %d batch(es) in %.1fs.', $batches_run, $elapsed ) );
                 return;
             }
 
-            $result = $this->sync_attachment( $attachment_id, $resize_before_sync );
-
-            // Only remove from queue if sync succeeded.
-            if ( ! is_wp_error( $result ) ) {
-                $this->remove_from_queue( $attachment_id );
-                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                    error_log( sprintf( '[Bunny.net Offload] Synced attachment %d OK.', $attachment_id ) );
-                }
-            } else {
-                // Log the error (always, not gated on WP_DEBUG).
+            if ( $elapsed >= $time_budget ) {
                 // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log( sprintf( '[Bunny.net Offload] Failed to sync attachment %d: %s', $attachment_id, $result->get_error_message() ) );
-
-                // Move failed item to end of queue to retry later.
-                $this->remove_from_queue( $attachment_id );
-                $current_queue = get_option( self::QUEUE_OPTION, array() );
-                $current_queue[] = $attachment_id;
-                update_option( self::QUEUE_OPTION, array_unique( $current_queue ) );
-
-                // Track error count.
-                $status = get_option( 'bnog_sync_status', array() );
-                $status['errors'] = isset( $status['errors'] ) ? $status['errors'] + 1 : 1;
-
-                // If we've had too many consecutive errors, pause sync.
-                if ( $status['errors'] >= 50 ) {
-                    $status['running'] = false;
-                    $status['paused_reason'] = __( 'Sync paused due to too many errors. Check your file types and CDN configuration.', 'bunny-net-offload-gelform' );
-                    update_option( 'bnog_sync_status', $status );
-                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                    error_log( '[Bunny.net Offload] Sync paused: 50+ errors.' );
-                    return;
-                }
-                update_option( 'bnog_sync_status', $status );
+                error_log( sprintf( '[Bunny.net Offload] Time budget reached: %.1fs elapsed (budget %.1fs), %d batch(es) processed, %d remaining.', $elapsed, $time_budget, $batches_run, count( $remaining_queue ) ) );
+                return;
             }
+        } while ( true );
+    }
+
+    /**
+     * Determine how long process_queue() may run before yielding to the next cron tick.
+     *
+     * Reads PHP's max_execution_time and reserves headroom for shutdown work.
+     * Returns at most 75% of max_execution_time, capped at 50s, and never
+     * exceeding the configured limit (so very small limits scale down too).
+     *
+     * @return float Seconds available for the batch loop.
+     */
+    private function get_time_budget() {
+        $max = (int) ini_get( 'max_execution_time' );
+
+        // No limit (CLI typically). Cap at 50s so we don't hog a long-running cron.
+        if ( $max <= 0 ) {
+            return 50.0;
         }
 
-        // Check if queue is now empty.
-        $remaining_queue = get_option( self::QUEUE_OPTION, array() );
-        if ( empty( $remaining_queue ) ) {
-            $status = get_option( 'bnog_sync_status', array() );
-            $status['running'] = false;
-            update_option( 'bnog_sync_status', $status );
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( '[Bunny.net Offload] Queue complete.' );
-        } else {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( sprintf( '[Bunny.net Offload] Batch done. %d remaining.', count( $remaining_queue ) ) );
-        }
+        // 75% of the limit, capped at 50s. Always strictly less than $max so
+        // headroom scales naturally for small limits.
+        return min( 50.0, $max * 0.75 );
     }
 
     /**

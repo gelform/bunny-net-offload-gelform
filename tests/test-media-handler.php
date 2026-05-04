@@ -174,4 +174,65 @@ class BNOG_Test_Media_Handler extends WP_UnitTestCase {
 		$status = get_option( 'bnog_sync_status', array() );
 		$this->assertEmpty( $status['running'] );
 	}
+
+	/**
+	 * Invoke the private get_time_budget() helper with a temporary
+	 * max_execution_time and return the resulting budget.
+	 *
+	 * @param int $max Value to set for max_execution_time during the call.
+	 * @return float
+	 */
+	private function call_get_time_budget( $max ) {
+		$original = ini_get( 'max_execution_time' );
+		ini_set( 'max_execution_time', (string) $max ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		try {
+			$method = new ReflectionMethod( $this->handler, 'get_time_budget' );
+			$method->setAccessible( true );
+			return $method->invoke( $this->handler );
+		} finally {
+			ini_set( 'max_execution_time', (string) $original ); // phpcs:ignore WordPress.PHP.IniSet.Risky
+		}
+	}
+
+	/**
+	 * Test that get_time_budget never exceeds max_execution_time, including
+	 * very small limits where a static floor would have overrun the wall.
+	 */
+	public function test_get_time_budget_never_exceeds_max() {
+		foreach ( array( 1, 2, 3, 5, 10, 30, 60, 120 ) as $max ) {
+			$budget = $this->call_get_time_budget( $max );
+			$this->assertLessThanOrEqual(
+				$max,
+				$budget,
+				sprintf( 'Budget %.2f exceeded max_execution_time=%d', $budget, $max )
+			);
+		}
+	}
+
+	/**
+	 * Test that get_time_budget caps at 50s for large limits.
+	 */
+	public function test_get_time_budget_caps_at_50() {
+		$budget = $this->call_get_time_budget( 300 );
+		$this->assertEquals( 50.0, $budget );
+	}
+
+	/**
+	 * Test that get_time_budget falls back to 50s when no limit is set
+	 * (max_execution_time=0, typical for CLI).
+	 */
+	public function test_get_time_budget_no_limit_returns_50() {
+		$budget = $this->call_get_time_budget( 0 );
+		$this->assertEquals( 50.0, $budget );
+	}
+
+	/**
+	 * Test that get_time_budget scales down for small limits — for the
+	 * regression Copilot flagged on PR #17.
+	 */
+	public function test_get_time_budget_scales_down_for_small_limits() {
+		$this->assertEqualsWithDelta( 0.75, $this->call_get_time_budget( 1 ), 0.001 );
+		$this->assertEqualsWithDelta( 2.25, $this->call_get_time_budget( 3 ), 0.001 );
+		$this->assertEqualsWithDelta( 7.5, $this->call_get_time_budget( 10 ), 0.001 );
+	}
 }
