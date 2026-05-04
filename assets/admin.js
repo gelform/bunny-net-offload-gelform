@@ -49,23 +49,28 @@
             // Stop bulk processing button
             $('#bnog-stop-bulk-btn').on('click', this.handleStopBulk);
 
-            // Refresh buttons: reload current URL (preserves JS-updated tab in address bar
-            // via history.replaceState; the server-rendered href is from page-load time
-            // and would otherwise revert the tab).
+            // Refresh buttons reload the current URL so JS-updated tab state
+            // is preserved across reload. See handleRefresh for details.
             $(document).on('click', '.bnog-refresh-btn', this.handleRefresh);
         },
 
         /**
          * Handle Refresh button click.
          *
-         * The href is server-rendered at page load and doesn't reflect tab changes
-         * made client-side via history.replaceState. Reload the current URL instead
-         * so the active tab is preserved across the refresh.
+         * The href is server-rendered at page load and doesn't reflect tab
+         * changes made client-side via history.replaceState. Reload the
+         * current URL so the active tab is preserved. Apply the clicked
+         * link's hash first so anchor-based scroll targets (e.g. the Bulk
+         * Processing card) still take effect after reload.
          *
          * @param {Event} e Click event.
          */
         handleRefresh: function(e) {
             e.preventDefault();
+            var hash = this.hash || '';
+            if (hash && window.location.hash !== hash) {
+                window.location.hash = hash;
+            }
             window.location.reload();
         },
 
