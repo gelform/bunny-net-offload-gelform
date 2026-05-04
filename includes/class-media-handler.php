@@ -285,7 +285,9 @@ class BNOG_Media_Handler {
      * Process upload queue (cron job).
      */
     public function process_queue() {
-        $start_time  = microtime( true );
+        // Use REQUEST_TIME_FLOAT when available so the budget accounts for time
+        // already spent in WP bootstrap before this callback ran.
+        $start_time  = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime( true );
         $time_budget = $this->get_time_budget();
         $queue       = get_option( self::QUEUE_OPTION, array() );
 
@@ -401,6 +403,8 @@ class BNOG_Media_Handler {
      * Determine how long process_queue() may run before yielding to the next cron tick.
      *
      * Reads PHP's max_execution_time and reserves headroom for shutdown work.
+     * Returns at most 75% of max_execution_time, capped at 50s, and never
+     * exceeding the configured limit (so very small limits scale down too).
      *
      * @return float Seconds available for the batch loop.
      */
@@ -412,8 +416,9 @@ class BNOG_Media_Handler {
             return 50.0;
         }
 
-        // Use 75% of the limit, between 5s and 50s.
-        return min( 50.0, max( 5.0, $max * 0.75 ) );
+        // 75% of the limit, capped at 50s. Always strictly less than $max so
+        // headroom scales naturally for small limits.
+        return min( 50.0, $max * 0.75 );
     }
 
     /**
