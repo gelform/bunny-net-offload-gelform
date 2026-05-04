@@ -32,7 +32,13 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 - **UIlicious E2E tests**: `tests/uilicious/*.test.js` — run via UIlicious dashboard
 - **Testing guide**: See `TESTING.md` for setup, manual checklists, and CI info
 
-## Recent Changes (v1.0.12 - v1.0.19)
+## Recent Changes (v1.0.12 - v1.0.20)
+
+### v1.0.20 - Auto-throttled batch loop in process_queue
+- `process_queue` now runs batches back-to-back within a single cron tick until either the queue empties, the sync is stopped, or PHP's max execution time is approaching.
+- Added private `get_time_budget()` helper: uses 75% of `ini_get('max_execution_time')` (clamped 5-50s); falls back to 50s when no limit is set.
+- Throughput on fast hosts is now bound by upload speed instead of the 60s cron interval; slow hosts still finish each batch safely without timeout.
+- Logs include batches-run and elapsed time on completion / budget exit for easier diagnosis.
 
 ### v1.0.19 - Fix path validation rejecting all uploads when realpath() fails
 - Path validation in `class-bunny-storage.php` no longer requires `realpath()` to succeed
