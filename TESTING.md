@@ -62,7 +62,7 @@ End-to-end UI tests located in `tests/uilicious/`. These test the admin settings
   - Sync existing media on a host with `open_basedir` configured (e.g. wpwiki.org) → verify queue drains without `invalid_path` errors
   - `wp option get bnog_sync_status` should show `errors:0` and `running:false` after queue completes
   - Sync on a normal host (no `open_basedir`) → verify still works (regression check)
-  - Feed a path outside `wp-content/` → verify `[Bunny.net Offload][ERROR] Path rejected: ...` lands in `debug.log`
+  - With `WP_DEBUG` enabled (the `Path rejected:` log line goes through `bunny_net_offload_gelform()->log()`, which is gated on `WP_DEBUG`), feed a path outside `wp-content/` → verify `[Bunny.net Offload][ERROR] Path rejected: ...` lands in `debug.log`
 
 ### v1.0.18 Changes
 
