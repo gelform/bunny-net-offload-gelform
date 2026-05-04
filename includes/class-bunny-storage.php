@@ -48,12 +48,38 @@ class BNOG_Bunny_Storage {
 
         // Validate file path is within allowed directories (defense in depth).
         // File type validation is handled by WordPress at upload time and by the sync queue builder.
-        $real_path    = wp_normalize_path( realpath( $local_path ) );
-        $upload_dir   = wp_upload_dir();
-        $uploads_path = wp_normalize_path( $upload_dir['basedir'] );
-        $content_path = wp_normalize_path( WP_CONTENT_DIR );
+        // Compare both raw and resolved paths against both raw and resolved bases —
+        // some hosts (open_basedir, certain symlink layouts) make realpath() return
+        // false even for valid files, and others have symlinks that resolve elsewhere.
+        $upload_dir         = wp_upload_dir();
+        $normalized_path    = wp_normalize_path( $local_path );
+        $resolved_file      = realpath( $local_path );
+        $resolved_file      = $resolved_file ? wp_normalize_path( $resolved_file ) : '';
+        $uploads_raw        = wp_normalize_path( $upload_dir['basedir'] );
+        $content_raw        = wp_normalize_path( WP_CONTENT_DIR );
+        $uploads_resolved   = realpath( $upload_dir['basedir'] );
+        $content_resolved   = realpath( WP_CONTENT_DIR );
+        $uploads_resolved   = $uploads_resolved ? wp_normalize_path( $uploads_resolved ) : '';
+        $content_resolved   = $content_resolved ? wp_normalize_path( $content_resolved ) : '';
 
-        if ( false === $real_path || ( 0 !== strpos( $real_path, $uploads_path ) && 0 !== strpos( $real_path, $content_path ) ) ) {
+        $candidates = array_filter( array( $normalized_path, $resolved_file ) );
+        $bases      = array_filter( array_unique( array( $uploads_raw, $content_raw, $uploads_resolved, $content_resolved ) ) );
+
+        $valid = false;
+        foreach ( $candidates as $candidate ) {
+            foreach ( $bases as $base ) {
+                if ( 0 === strpos( $candidate, $base ) ) {
+                    $valid = true;
+                    break 2;
+                }
+            }
+        }
+
+        if ( ! $valid ) {
+            bunny_net_offload_gelform()->log(
+                sprintf( 'Path rejected: %s (uploads=%s, content=%s)', $normalized_path, $uploads_raw, $content_raw ),
+                'error'
+            );
             return new WP_Error( 'invalid_path', __( 'File path is not within allowed directories.', 'bunny-net-offload-gelform' ) );
         }
 

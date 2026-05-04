@@ -32,7 +32,13 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 - **UIlicious E2E tests**: `tests/uilicious/*.test.js` — run via UIlicious dashboard
 - **Testing guide**: See `TESTING.md` for setup, manual checklists, and CI info
 
-## Recent Changes (v1.0.12 - v1.0.18)
+## Recent Changes (v1.0.12 - v1.0.19)
+
+### v1.0.19 - Fix path validation rejecting all uploads when realpath() fails
+- Path validation in `class-bunny-storage.php` no longer requires `realpath()` to succeed
+- Compares both raw and resolved file paths against both raw and resolved bases (uploads + content)
+- Fixes hosts where `open_basedir` or symlink layouts cause `realpath()` to return false for valid files
+- Adds debug log line when a path is rejected so future failures are easier to diagnose
 
 ### v1.0.18 - PNG-to-JPEG conversion, Copilot review fixes
 - PNG-to-JPEG conversion for non-transparent PNGs (uses chunk-stream tRNS detection)
