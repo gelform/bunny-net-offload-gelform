@@ -32,7 +32,12 @@ WordPress plugin for image optimization and CDN offloading using Bunny.net with 
 - **UIlicious E2E tests**: `tests/uilicious/*.test.js` — run via UIlicious dashboard
 - **Testing guide**: See `TESTING.md` for setup, manual checklists, and CI info
 
-## Recent Changes (v1.0.12 - v1.0.20)
+## Recent Changes (v1.0.12 - v1.0.21)
+
+### v1.0.21 - Refresh button preserves active tab
+- The `<a class="bnog-refresh-btn">` link is server-rendered and its href is fixed at page-load time, so it didn't reflect tab changes made client-side via `history.replaceState`.
+- Added a JS click handler that calls `e.preventDefault()` then `window.location.reload()`, which reloads whatever URL is currently in the address bar (preserving the active tab).
+- Bound via delegation on `document` so it covers all `.bnog-refresh-btn` instances (Status panel and the Bulk Processing panel).
 
 ### v1.0.20 - Auto-throttled batch loop in process_queue
 - `process_queue` now runs batches back-to-back within a single cron tick until either the queue empties, the sync is stopped, or PHP's max execution time is approaching.
