@@ -56,6 +56,26 @@ End-to-end UI tests located in `tests/uilicious/`. These test the admin settings
 
 ## Manual Testing Checklist
 
+### v1.0.21 Changes
+
+- [ ] **Refresh Button Preserves Active Tab**
+  - Open settings, click the **Advanced** tab → URL becomes `?tab=advanced`
+  - Click the **Status** tab → URL becomes `?tab=status`
+  - Click the **Refresh** button on the Sync card → page reloads with Status tab still active (regression: previously reverted to Advanced)
+  - Repeat starting from Settings, Sync, etc. → tab is always preserved
+- [ ] **Bulk Processing Refresh Anchor Still Scrolls**
+  - On the Bulk Processing card, click its **Refresh** link → page reloads and scrolls to `#bnog-bulk-processing`
+- [ ] **Direct URL Tab Selection (regression for v1.0.14)**
+  - Load `…?tab=settings` directly → Settings tab opens
+
+### v1.0.20 Changes
+
+- [ ] **Auto-throttled Batch Loop**
+  - Trigger a fresh sync of >10 attachments and tail `debug.log` for `[Bunny.net Offload]` lines
+  - Verify multiple `Synced attachment …` lines appear within a single `process_queue fired` invocation (multi-batch loop)
+  - On completion, verify `Queue complete. Ran N batch(es) in Xs.` lands with `N >= 1`
+  - When the queue is larger than one tick can handle, verify `Time budget reached: …, M remaining.` appears
+
 ### v1.0.19 Changes
 
 - [ ] **Path Validation Tolerates `realpath()` Failure**
